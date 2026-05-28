@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Зависимости отдельно — слой кэшируется
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn
+
+COPY . .
+
+# entrypoint: сначала alembic upgrade head, потом gunicorn
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

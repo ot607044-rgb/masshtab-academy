@@ -1,0 +1,263 @@
+.layout {
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.header {
+  background: #fff;
+  padding: 0.875rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.brand {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #6366f1;
+}
+
+.badge {
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.superBadge {
+  background: #ede9fe;
+  color: #7c3aed;
+}
+
+.adminBadge {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.userName {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.logoutBtn {
+  background: transparent;
+  color: #6b7280;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.4rem 0.875rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.logoutBtn:hover {
+  background: #f3f4f6;
+}
+
+.main {
+  padding: 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 1.75rem;
+}
+
+.pageTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 0.25rem;
+}
+
+.pageSubtitle {
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #9ca3af;
+}
+
+.empty {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #9ca3af;
+  background: #fff;
+  border-radius: 12px;
+  border: 2px dashed #e5e7eb;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 1.5rem;
+  border: 1.5px solid #e5e7eb;
+  transition: box-shadow 0.2s;
+}
+
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.cardInactive {
+  opacity: 0.65;
+}
+
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.companyName {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.statusActive {
+  background: #dcfce7;
+  color: #16a34a;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.statusInactive {
+  background: #fee2e2;
+  color: #dc2626;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.slug {
+  font-family: "Courier New", monospace;
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+
+.desc {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+}
+
+.date {
+  font-size: 0.8rem;
+  color: #d1d5db;
+  margin-bottom: 1rem;
+}
+
+.cardActions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* Users table */
+.tableWrap {
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1.5px solid #e5e7eb;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: #f9fafb;
+  padding: 0.875rem 1rem;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.table td {
+  padding: 0.875rem 1rem;
+  border-top: 1px solid #f3f4f6;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.table tr:hover td {
+  background: #fafafa;
+}
+
+.emailCell {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.roleBadge {
+  background: #ede9fe;
+  color: #7c3aed;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+/* Inline form */
+.inlineForm {
+  background: #fff;
+  border-radius: 14px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  border: 1.5px solid #e5e7eb;
+}
+
+.inlineForm h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #374151;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}

@@ -1,0 +1,305 @@
+.page {
+  padding: 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 0.2rem;
+}
+
+.subtitle {
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.filterSelect {
+  padding: 0.5rem 0.875rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  background: #fff;
+  color: #374151;
+}
+
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #9ca3af;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+
+.tableWrap {
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1.5px solid #e5e7eb;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: #f9fafb;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.table td {
+  padding: 0.875rem 1rem;
+  border-top: 1px solid #f3f4f6;
+  font-size: 0.875rem;
+  color: #374151;
+  vertical-align: middle;
+}
+
+.table tr:hover td {
+  background: #fafafa;
+}
+
+.rowAssigned td {
+  background: #f0fdf4 !important;
+}
+
+.nameCell {
+  font-weight: 500;
+  color: #111827;
+}
+
+.subtext {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  margin-top: 0.2rem;
+}
+
+.contactCell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.phone {
+  color: #9ca3af;
+  font-size: 0.8rem;
+}
+
+.dateCell {
+  white-space: nowrap;
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+.muted {
+  color: #d1d5db;
+  font-size: 0.85rem;
+}
+
+.empty {
+  text-align: center;
+  padding: 2.5rem;
+  color: #9ca3af;
+}
+
+/* ── Badges ──────────────────────────────────────────────────────────────── */
+
+.statusBadge {
+  padding: 0.2rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.statusGreen  { background: #dcfce7; color: #16a34a; }
+.statusYellow { background: #fef9c3; color: #a16207; }
+.statusBlue   { background: #dbeafe; color: #1d4ed8; }
+.statusOrange { background: #ffedd5; color: #c2410c; }
+.statusRed    { background: #fee2e2; color: #dc2626; }
+
+.levelBadge {
+  background: #ede9fe;
+  color: #7c3aed;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.countBadge {
+  background: #f3f4f6;
+  color: #6b7280;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+/* ── Tags ────────────────────────────────────────────────────────────────── */
+
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.tag {
+  background: #ede9fe;
+  color: #7c3aed;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+}
+
+.tagRemovable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.tagRemovable:hover {
+  background: #ddd6fe;
+}
+
+.skillInputRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 1.5rem;
+  border: 1.5px solid #e5e7eb;
+  transition: box-shadow 0.2s;
+}
+
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.625rem;
+}
+
+.cardTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.cardDesc {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 0.875rem;
+  line-height: 1.5;
+}
+
+.cardMeta {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-bottom: 1rem;
+}
+
+.cardMeta strong {
+  color: #374151;
+}
+
+.cardActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.emptyWide {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 3rem;
+  color: #9ca3af;
+  background: #fff;
+  border-radius: 14px;
+  border: 2px dashed #e5e7eb;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0.375rem 0;
+  margin-bottom: 1.25rem;
+  transition: color 0.15s;
+}
+
+.backBtn:hover {
+  color: #111827;
+}
+
+/* ── Knowledge matrix ────────────────────────────────────────────────────── */
+
+.matrixSection {
+  background: #fff;
+  border-radius: 14px;
+  border: 1.5px solid #e5e7eb;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 1rem;
+}
+
+.assignBtn {
+  background: #ede9fe;
+  color: #7c3aed;
+  border: none;
+  border-radius: 6px;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.assignBtn:hover {
+  background: #ddd6fe;
+}

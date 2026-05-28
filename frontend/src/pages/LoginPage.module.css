@@ -1,0 +1,72 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  padding: 1rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 2.75rem;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.25rem;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-bottom: 2rem;
+}
+
+.form {
+  text-align: left;
+}
+
+.submitBtn {
+  width: 100%;
+  padding: 0.875rem;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition: opacity 0.2s;
+}
+
+.submitBtn:hover {
+  opacity: 0.9;
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
