@@ -491,3 +491,89 @@ export interface ActiveSupportSession {
   expires_at: string;
   reason: string;
 }
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | "lesson_assigned"
+  | "test_assigned"
+  | "deadline_soon"
+  | "overdue"
+  | "test_failed"
+  | "retake_needed";
+
+export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+  lesson_assigned: "Новый урок",
+  test_assigned: "Новый тест",
+  deadline_soon: "Срок истекает",
+  overdue: "Просрочено",
+  test_failed: "Тест не сдан",
+  retake_needed: "Нужна пересдача",
+};
+
+export const NOTIFICATION_TYPE_ICONS: Record<NotificationType, string> = {
+  lesson_assigned: "📖",
+  test_assigned: "🧪",
+  deadline_soon: "⏰",
+  overdue: "🚨",
+  test_failed: "❌",
+  retake_needed: "🔄",
+};
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  company_id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  entity_id: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface NotificationUnreadCount {
+  count: number;
+}
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+export interface OverviewStats {
+  total_employees: number;
+  active_employees: number;
+  lessons_completed: number;
+  lessons_assigned: number;
+  lessons_overdue: number;
+  tests_passed: number;
+  tests_failed: number;
+  avg_test_score: number | null;
+  completion_rate: number;
+}
+
+export interface DeptStat {
+  department_id: string;
+  department_name: string;
+  employee_count: number;
+  lessons_completed: number;
+  lessons_assigned: number;
+  avg_score: number | null;
+  completion_rate: number;
+}
+
+export interface WeakTopicStat {
+  topic: string;
+  count: number;
+}
+
+export interface EmployeeProgress {
+  employee_id: string;
+  full_name: string;
+  department_id: string | null;
+  department_name: string | null;
+  lessons_completed: number;
+  lessons_total: number;
+  tests_passed: number;
+  tests_total: number;
+  best_score: number | null;
+  weak_areas: string[];
+}

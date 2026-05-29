@@ -29,26 +29,14 @@ def upgrade() -> None:
     )
     op.create_index("ix_companies_slug", "companies", ["slug"])
 
-    userrole_enum = postgresql.ENUM(
-        "super_admin", "company_admin", "hr", "department_head", "methodologist", "employee",
-        name="userrole",
-    )
-    userrole_enum.create(op.get_bind())
-
+    # role хранится как String(50) — без PostgreSQL ENUM, избегаем конфликтов
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("email", sa.String(255), nullable=False),
         sa.Column("hashed_password", sa.String(255), nullable=False),
         sa.Column("full_name", sa.String(255), nullable=False),
-        sa.Column(
-            "role",
-            sa.Enum(
-                "super_admin", "company_admin", "hr", "department_head", "methodologist", "employee",
-                name="userrole",
-            ),
-            nullable=False,
-        ),
+        sa.Column("role", sa.String(50), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("company_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
@@ -67,4 +55,3 @@ def downgrade() -> None:
     op.drop_table("users")
     op.drop_index("ix_companies_slug", table_name="companies")
     op.drop_table("companies")
-    op.execute("DROP TYPE IF EXISTS userrole")

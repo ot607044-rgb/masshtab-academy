@@ -8,10 +8,12 @@ from app.models.knowledge import KnowledgeTopic, PositionTopic  # noqa
 from app.models.lesson import Lesson, LessonMaterial, LessonAssignment  # noqa
 from app.models.support import SupportAccessRequest, SupportAccessLog  # noqa
 from app.models.test import Test, Question, AnswerOption, TestAttempt, AttemptAnswer  # noqa
+from app.models.notification import Notification  # noqa
 
 __all__ = [
     "Base", "Company", "User", "Department", "Position", "Employee",
     "KnowledgeTopic", "PositionTopic", "Lesson", "LessonMaterial", "LessonAssignment",
     "SupportAccessRequest", "SupportAccessLog",
     "Test", "Question", "AnswerOption", "TestAttempt", "AttemptAnswer",
+    "Notification",
 ]

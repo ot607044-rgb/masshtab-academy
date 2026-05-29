@@ -17,6 +17,8 @@ import TestDetailPage from "./pages/TestDetailPage";
 import TestTakePage from "./pages/TestTakePage";
 import MyTestsPage from "./pages/MyTestsPage";
 import SupportRequestsPage from "./pages/SupportRequestsPage";
+import HRDashboardPage from "./pages/HRDashboardPage";
+import ManagerDashboardPage from "./pages/ManagerDashboardPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 const COMPANY_ROLES = ["company_admin", "hr", "department_head", "methodologist", "employee"] as const;
@@ -58,6 +60,8 @@ const AppRoutes: React.FC = () => (
       }
     >
       <Route index element={<Navigate to="employees" replace />} />
+      <Route path="hr-dashboard"     element={<HRDashboardPage />} />
+      <Route path="my-department"    element={<ManagerDashboardPage />} />
       <Route path="employees"        element={<EmployeesPage />} />
       <Route path="departments"      element={<DepartmentsPage />} />
       <Route path="positions"        element={<PositionsPage />} />

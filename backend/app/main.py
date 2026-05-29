@@ -4,12 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
-from app.database import engine, AsyncSessionLocal, Base
+from app.database import engine, AsyncSessionLocal
 from app.models import Company, User  # noqa: ensures all models are registered
 from app.models.user import UserRole
 from app.core.security import get_password_hash
 from app.config import settings
-from app.api.v1 import auth, companies, users, departments, positions, employees, knowledge, lessons, assignments, support, tests
+from app.api.v1 import auth, companies, users, departments, positions, employees, knowledge, lessons, assignments, support, tests, notifications, analytics
 import uuid
 
 
@@ -34,8 +34,6 @@ async def _create_superadmin() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
     await _create_superadmin()
     yield
     await engine.dispose()
@@ -77,8 +75,10 @@ app.include_router(employees.router,   prefix="/api/v1/employees",   tags=["empl
 app.include_router(knowledge.router,   prefix="/api/v1/knowledge",   tags=["knowledge"])
 app.include_router(lessons.router,     prefix="/api/v1/lessons",     tags=["lessons"])
 app.include_router(assignments.router, prefix="/api/v1/assignments", tags=["assignments"])
-app.include_router(support.router,     prefix="/api/v1/support",     tags=["support"])
-app.include_router(tests.router,       prefix="/api/v1/tests",        tags=["tests"])
+app.include_router(support.router,       prefix="/api/v1/support",        tags=["support"])
+app.include_router(tests.router,         prefix="/api/v1/tests",          tags=["tests"])
+app.include_router(notifications.router, prefix="/api/v1/notifications",  tags=["notifications"])
+app.include_router(analytics.router,     prefix="/api/v1/analytics",      tags=["analytics"])
 
 
 @app.get("/health", tags=["system"])

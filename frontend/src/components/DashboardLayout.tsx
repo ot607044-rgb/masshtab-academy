@@ -2,17 +2,20 @@ import React, { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getPendingCount } from "../api/support";
+import NotificationBell from "./NotificationBell";
 import styles from "./DashboardLayout.module.css";
 
 const BASE_NAV = [
-  { to: "employees",   label: "Сотрудники",     icon: "👤", roles: ["company_admin", "hr", "department_head", "methodologist", "employee"] },
-  { to: "departments", label: "Отделы",          icon: "🏢", roles: ["company_admin", "hr", "department_head"] },
-  { to: "positions",   label: "Должности",       icon: "💼", roles: ["company_admin", "hr", "department_head"] },
-  { to: "knowledge",   label: "Матрица знаний",  icon: "📚", roles: ["company_admin", "hr", "methodologist"] },
-  { to: "lessons",     label: "База знаний",     icon: "📖", roles: ["company_admin", "hr", "department_head", "methodologist", "employee"] },
-  { to: "tests",       label: "Тесты",           icon: "🧪", roles: ["company_admin", "hr", "methodologist", "employee"] },
-  { to: "my-lessons",  label: "Мои уроки",       icon: "🎓", roles: ["employee"] },
-  { to: "my-tests",    label: "Мои тесты",       icon: "✅", roles: ["employee"] },
+  { to: "hr-dashboard",    label: "Аналитика HR",       icon: "📊", roles: ["company_admin", "hr"] },
+  { to: "my-department",   label: "Мой отдел",          icon: "📈", roles: ["department_head"] },
+  { to: "employees",       label: "Сотрудники",         icon: "👤", roles: ["company_admin", "hr", "department_head", "methodologist", "employee"] },
+  { to: "departments",     label: "Отделы",             icon: "🏢", roles: ["company_admin", "hr", "department_head"] },
+  { to: "positions",       label: "Должности",          icon: "💼", roles: ["company_admin", "hr", "department_head"] },
+  { to: "knowledge",       label: "Матрица знаний",     icon: "📚", roles: ["company_admin", "hr", "methodologist"] },
+  { to: "lessons",         label: "База знаний",        icon: "📖", roles: ["company_admin", "hr", "department_head", "methodologist", "employee"] },
+  { to: "tests",           label: "Тесты",              icon: "🧪", roles: ["company_admin", "hr", "methodologist", "employee"] },
+  { to: "my-lessons",      label: "Мои уроки",          icon: "🎓", roles: ["employee"] },
+  { to: "my-tests",        label: "Мои тесты",          icon: "✅", roles: ["employee"] },
   { to: "support-requests", label: "Запросы поддержки", icon: "🛡", roles: ["company_admin"] },
 ];
 
@@ -87,6 +90,16 @@ const DashboardLayout: React.FC = () => {
       </aside>
 
       <main className={styles.content}>
+        {/* Top bar with notification bell */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            padding: "0.75rem 1.5rem 0",
+          }}
+        >
+          <NotificationBell />
+        </div>
         <Outlet />
       </main>
     </div>
