@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Boolean, ForeignKey, Enum
+from sqlalchemy import Column, String, Boolean, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -23,7 +23,8 @@ class User(Base, TimestampMixin):
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.EMPLOYEE)
+    # String(50) — не используем Enum чтобы избежать PostgreSQL-каста ::userrole
+    role = Column(String(50), nullable=False, default=UserRole.EMPLOYEE.value)
     is_active = Column(Boolean, default=True, nullable=False)
 
     # NULL only for super_admin (platform-level, no company)
