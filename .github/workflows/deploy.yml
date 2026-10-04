@@ -8,6 +8,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -t ed25519 31.129.108.20 >> ~/.ssh/known_hosts
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -20,4 +25,4 @@ jobs:
             git pull origin main
             docker compose build backend frontend
             docker compose up -d --remove-orphans
-            echo "Deployed successfully at $(date)"
+            echo "Deployed at $(date)"
