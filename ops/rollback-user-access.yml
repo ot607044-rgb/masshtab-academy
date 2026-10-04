@@ -1,0 +1,9 @@
+# Previous images. The entrypoint is overridden: the old image has no migrations 011/013,
+# so `alembic upgrade head` would fail on schema 013. The extra columns and the
+# user_invitations table are ignored by the old code.
+services:
+  backend:
+    image: masshtab-academy-backend:rollback-20261004-user-access
+    entrypoint: ["gunicorn", "app.main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "--bind", "0.0.0.0:8000", "--timeout", "120", "--access-logfile", "-"]
+  frontend:
+    image: masshtab-academy-frontend:rollback-20261004-user-access

@@ -366,3 +366,34 @@ async def test_employee_profile_is_tenant_scoped(context):
     user.company_id = foreign_position.company_id
     await db.flush()
     assert (await client.get(f"/api/v1/workspace/employees/{employee.id}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_department_nesting_create_move_and_delete(context):
+    client, *_ = context
+    root = (await client.post("/api/v1/departments/", json={"name": "Production"})).json()
+    child = await client.post("/api/v1/departments/", json={"name": "Chief accountants", "parent_id": root["id"]})
+    assert child.status_code == 201, child.text
+    child = child.json()
+    assert child["parent_id"] == root["id"]
+    grandchild = (await client.post("/api/v1/departments/", json={"name": "VAT", "parent_id": child["id"]})).json()
+    moved = await client.patch(f"/api/v1/departments/{child['id']}", json={"parent_id": None})
+    assert moved.status_code == 200 and moved.json()["parent_id"] is None
+    await client.patch(f"/api/v1/departments/{child['id']}", json={"parent_id": root["id"]})
+    assert (await client.delete(f"/api/v1/departments/{child['id']}")).status_code == 204
+    assert (await client.get(f"/api/v1/departments/{grandchild['id']}")).json()["parent_id"] == root["id"]
+
+
+@pytest.mark.asyncio
+async def test_department_parent_rejects_cycles_and_foreign_company(context):
+    from app.models.department import Department
+    client, db, user, _, foreign_position = context
+    foreign = Department(id=uuid.uuid4(), company_id=foreign_position.company_id, name="Foreign")
+    db.add(foreign)
+    await db.commit()
+    root = (await client.post("/api/v1/departments/", json={"name": "Root"})).json()
+    child = (await client.post("/api/v1/departments/", json={"name": "Child", "parent_id": root["id"]})).json()
+    assert (await client.patch(f"/api/v1/departments/{root['id']}", json={"parent_id": root["id"]})).status_code == 400
+    assert (await client.patch(f"/api/v1/departments/{root['id']}", json={"parent_id": child["id"]})).status_code == 400
+    assert (await client.post("/api/v1/departments/", json={"name": "X", "parent_id": str(foreign.id)})).status_code == 404
+    assert (await client.patch(f"/api/v1/departments/{child['id']}", json={"parent_id": str(uuid.uuid4())})).status_code == 404

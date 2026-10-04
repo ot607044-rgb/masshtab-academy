@@ -16,6 +16,10 @@ class Department(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
+    parent_id = Column(
+        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
     # Soft reference to employees.id — set after employees table is created
     head_id = Column(UUID(as_uuid=True), nullable=True)
 

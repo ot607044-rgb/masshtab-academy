@@ -10,12 +10,14 @@ class DepartmentCreate(BaseModel):
     name: DepartmentName
     description: Optional[str] = None
     head_id: Optional[UUID] = None
+    parent_id: Optional[UUID] = None
 
 
 class DepartmentUpdate(BaseModel):
     name: Optional[DepartmentName] = None
     description: Optional[str] = None
     head_id: Optional[UUID] = None
+    parent_id: Optional[UUID] = None
 
     @field_validator("name")
     @classmethod
@@ -31,6 +33,7 @@ class DepartmentResponse(BaseModel):
     description: Optional[str]
     company_id: UUID
     head_id: Optional[UUID]
+    parent_id: Optional[UUID] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

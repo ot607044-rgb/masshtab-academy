@@ -60,6 +60,7 @@ export interface Department {
   description: string | null;
   company_id: string;
   head_id: string | null;
+  parent_id?: string | null;
   created_at: string;
 }
 
@@ -67,6 +68,7 @@ export interface DepartmentCreate {
   name: string;
   description?: string | null;
   head_id?: string | null;
+  parent_id?: string | null;
 }
 
 // ── Position ──────────────────────────────────────────────────────────────────

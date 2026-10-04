@@ -21,6 +21,20 @@ async def validate_head(db, head_id, company_id):
             raise HTTPException(status_code=404, detail="Руководитель не найден")
 
 
+async def validate_parent(db, parent_id, company_id, dept_id=None):
+    """Parent must belong to the same company and must not create a cycle."""
+    current = parent_id
+    while current is not None:
+        if current == dept_id:
+            raise HTTPException(status_code=400, detail="Отдел не может входить сам в себя или в свой подотдел")
+        row = (await db.execute(
+            select(Department.parent_id).where(Department.id == current, Department.company_id == company_id)
+        )).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Вышестоящий отдел не найден")
+        current = row[0]
+
+
 def _company_filter(current_user, query):
     if current_user.role != UserRole.SUPER_ADMIN:
         query = query.where(Department.company_id == current_user.company_id)
@@ -44,11 +58,13 @@ async def create_department(
     db: AsyncSession = Depends(get_db),
 ):
     await validate_head(db, data.head_id, current_user.company_id)
+    await validate_parent(db, data.parent_id, current_user.company_id)
     dept = Department(
         id=uuid.uuid4(),
         name=data.name,
         description=data.description,
         head_id=data.head_id,
+        parent_id=data.parent_id,
         company_id=current_user.company_id,
     )
     db.add(dept)
@@ -88,6 +104,8 @@ async def update_department(
     changes = data.model_dump(exclude_unset=True)
     if "head_id" in changes:
         await validate_head(db, data.head_id, dept.company_id)
+    if "parent_id" in changes:
+        await validate_parent(db, data.parent_id, dept.company_id, dept.id)
     for field, value in changes.items():
         setattr(dept, field, value)
     await db.commit()
@@ -107,5 +125,9 @@ async def delete_department(
         raise HTTPException(status_code=404, detail="Отдел не найден")
     if current_user.role != UserRole.SUPER_ADMIN and dept.company_id != current_user.company_id:
         raise HTTPException(status_code=403, detail="Доступ запрещён")
+    # Subdepartments move up to the deleted department's parent instead of disappearing
+    children = (await db.execute(select(Department).where(Department.parent_id == dept.id))).scalars().all()
+    for child in children:
+        child.parent_id = dept.parent_id
     await db.delete(dept)
     await db.commit()
