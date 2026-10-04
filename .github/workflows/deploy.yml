@@ -8,21 +8,21 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Add server to known_hosts
+      - name: Deploy
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
+          echo "$SSH_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          ssh-keyscan -t ed25519 31.129.108.20 >> ~/.ssh/known_hosts 2>/dev/null || true
           mkdir -p ~/.ssh
-          ssh-keyscan -t ed25519 31.129.108.20 >> ~/.ssh/known_hosts
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: 31.129.108.20
-          username: root
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
+          ssh-keyscan 31.129.108.20 >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no root@31.129.108.20 "
             set -e
             cd /opt/masshtab-academy
             git pull origin main
             docker compose build backend frontend
             docker compose up -d --remove-orphans
-            echo "Deployed at $(date)"
+            echo 'Done at \$(date)'
+          "
+          rm /tmp/deploy_key
