@@ -28,7 +28,7 @@ export function InviteLinkModal({ issued, onClose }: { issued: InvitationIssued;
         : <>Передайте ссылку сотруднику <strong>{issued.user.full_name}</strong> ({issued.user.email}). По ней он задаст свой пароль и войдёт в систему.</>}
     </p>
     <label htmlFor="invite-url">Ссылка для входа · действует до {dateLabel(issued.invite_expires_at)}</label>
-    <input id="invite-url" readOnly value={url} onFocus={e => e.currentTarget.select()} />
+    <input id="invite-url" readOnly value={url} style={{ width: "100%" }} onFocus={e => e.currentTarget.select()} />
     <p style={{ fontSize: 12, color: "#717982", marginTop: 8 }}>Ссылка одноразовая. Новая ссылка отменяет предыдущую.</p>
     <div className="academy-dialog-actions">
       <button type="button" className="btn-secondary" onClick={onClose}>Готово</button>
@@ -38,7 +38,7 @@ export function InviteLinkModal({ issued, onClose }: { issued: InvitationIssued;
 }
 
 export function RoleSelect({ id, value, onChange, disabled }: { id?: string; value: UserRole; onChange: (role: UserRole) => void; disabled?: boolean }) {
-  return <select id={id} value={value} disabled={disabled} onChange={e => onChange(e.target.value as UserRole)}>
+  return <select id={id} value={value} disabled={disabled} style={{ minWidth: 150 }} onChange={e => onChange(e.target.value as UserRole)}>
     {COMPANY_ROLES.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
   </select>;
 }
@@ -57,7 +57,7 @@ export function GrantAccessModal({ employee, onClose, onIssued }: { employee: Em
     <form onSubmit={submit}>
       <p style={{ fontSize: 13 }}>Сотрудник <strong>{employee.full_name}</strong> получит личную учётную запись и ссылку, чтобы задать пароль.</p>
       <label htmlFor="grant-email">Email для входа</label>
-      <input id="grant-email" type="email" required autoFocus value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.ru" />
+      <input id="grant-email" type="email" required data-autofocus value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.ru" />
       <label htmlFor="grant-role">Роль</label>
       <RoleSelect id="grant-role" value={role} onChange={setRole} />
       <p style={{ fontSize: 12, color: "#717982", marginTop: 8 }}>{COMPANY_ROLES.find(r => r.value === role)?.hint}</p>

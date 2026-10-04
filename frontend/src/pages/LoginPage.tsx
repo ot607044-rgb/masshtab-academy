@@ -25,8 +25,9 @@ const LoginPage: React.FC = () => {
       await login(email, password);
       // navigation handled by useEffect above
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(msg || "Неверный email или пароль");
+      const msg = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      // FastAPI returns a list of objects for validation errors
+      setError(typeof msg === "string" ? msg : "Неверный email или пароль");
       setLoading(false);
     }
   };

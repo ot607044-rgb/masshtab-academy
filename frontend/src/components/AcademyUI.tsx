@@ -17,7 +17,7 @@ export function LoadState({ error, retry }: { error: string; retry: () => void }
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
-  useEffect(() => { const dialog = ref.current!; dialog.showModal(); return () => dialog.close(); }, []);
+  useEffect(() => { const dialog = ref.current!; dialog.showModal(); dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus(); return () => dialog.close(); }, []);
   return <dialog ref={ref} className="academy-dialog" aria-labelledby={id} onCancel={onClose}><div className="academy-dialog-heading"><h2 id={id}>{title}</h2><button type="button" className="academy-icon" title="Закрыть" aria-label="Закрыть" onClick={onClose}><X size={20} /></button></div>{children}</dialog>;
 }
 export function ProgressBar({ value, danger = false }: { value: number; danger?: boolean }) {

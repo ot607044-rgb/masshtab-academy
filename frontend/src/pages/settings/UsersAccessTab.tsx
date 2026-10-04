@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { KeyRound, Lock, LockOpen, Send } from "lucide-react";
-import { ACCESS_STATUS_LABELS, COMPANY_ROLES, getAccessUsers, resendInvitation, updateAccess, type AccessStatus, type AccessUser, type InvitationIssued } from "../../api/access";
+import { COMPANY_ROLES, getAccessUsers, resendInvitation, updateAccess, type AccessStatus, type AccessUser, type InvitationIssued } from "../../api/access";
 import { getEmployees } from "../../api/employees";
 import { apiError } from "../../api/workspace";
 import { useAuth } from "../../context/AuthContext";
@@ -44,7 +44,7 @@ export default function UsersAccessTab() {
     } catch (e) { setActionError(apiError(e)); } finally { setBusy(undefined); }
   }
   const count = (status: AccessStatus) => users.filter(u => u.status === status).length;
-  const filters: [Filter, string][] = [["all", `Все · ${users.length}`], ["active", `${ACCESS_STATUS_LABELS.active} · ${count("active")}`], ["invited", `${ACCESS_STATUS_LABELS.invited} · ${count("invited") + count("invite_expired")}`], ["blocked", `${ACCESS_STATUS_LABELS.blocked} · ${count("blocked")}`], ["without", `Без доступа · ${withoutAccess.length}`]];
+  const filters: [Filter, string][] = [["all", `Все · ${users.length}`], ["active", `Подключены · ${count("active")}`], ["invited", `Приглашены · ${count("invited") + count("invite_expired")}`], ["blocked", `Заблокированы · ${count("blocked")}`], ["without", `Без доступа · ${withoutAccess.length}`]];
   const shown = users.filter(u => filter === "all" || u.status === filter || (filter === "invited" && u.status === "invite_expired"));
 
   return <div>
