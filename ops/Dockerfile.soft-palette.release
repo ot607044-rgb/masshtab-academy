@@ -1,0 +1,5 @@
+ARG BASE_IMAGE=masshtab-academy-frontend:rollback-20261004-soft-palette
+FROM ${BASE_IMAGE}
+COPY frontend/dist /usr/share/nginx/html
+
+

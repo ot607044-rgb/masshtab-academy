@@ -8,7 +8,7 @@ from sqlalchemy import select, func
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.api.deps import get_hr_or_above, get_any_company_user, get_effective_company_id
+from app.api.deps import get_hr_or_above, get_any_company_user, get_effective_company_id, own_employee, visible_employees
 from app.models.employee import Employee, EmployeeStatus
 from app.models.lesson import LessonAssignment, AssignmentStatus
 from app.models.test import TestAttempt
@@ -297,24 +297,16 @@ async def get_my_department(
             detail="Требуются права руководителя или HR",
         )
 
-    # Find manager's Employee record
-    mgr_rows = await db.execute(
-        select(Employee).where(
-            Employee.user_id == current_user.id,
-            Employee.company_id == effective_company_id,
-        )
-    )
-    manager_emp = mgr_rows.scalar_one_or_none()
-
-    if not manager_emp or not manager_emp.department_id:
+    manager_emp = await own_employee(db, current_user, effective_company_id)
+    if not manager_emp:
         return []
-
-    team_rows = await db.execute(
-        select(Employee).where(
-            Employee.department_id == manager_emp.department_id,
-            Employee.company_id == effective_company_id,
-        )
-    )
+    if current_user.role == UserRole.DEPARTMENT_HEAD:
+        scope = await visible_employees(db, current_user, effective_company_id)
+    elif manager_emp.department_id:
+        scope = (Employee.company_id == effective_company_id) & (Employee.department_id == manager_emp.department_id)
+    else:
+        return []
+    team_rows = await db.execute(select(Employee).where(scope).order_by(Employee.full_name))
     employees = team_rows.scalars().all()
 
     dept_rows = await db.execute(

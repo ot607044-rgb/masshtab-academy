@@ -65,8 +65,8 @@ export interface Department {
 
 export interface DepartmentCreate {
   name: string;
-  description?: string;
-  head_id?: string;
+  description?: string | null;
+  head_id?: string | null;
 }
 
 // ── Position ──────────────────────────────────────────────────────────────────
@@ -83,8 +83,8 @@ export interface Position {
 
 export interface PositionCreate {
   name: string;
-  description?: string;
-  department_id?: string;
+  description?: string | null;
+  department_id?: string | null;
   required_skills?: string[];
 }
 
@@ -100,6 +100,7 @@ export const EMPLOYEE_STATUS_LABELS: Record<EmployeeStatus, string> = {
 };
 
 export interface Employee {
+  photo_url?: string | null;
   id: string;
   full_name: string;
   email: string | null;
@@ -127,6 +128,17 @@ export interface EmployeeCreate {
   status?: EmployeeStatus;
   hire_date?: string;
 }
+
+export type EmployeeUpdate = Partial<{
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  department_id: string | null;
+  position_id: string | null;
+  manager_id: string | null;
+  status: EmployeeStatus;
+  hire_date: string | null;
+}>;
 
 // ── Knowledge ─────────────────────────────────────────────────────────────────
 
@@ -156,7 +168,15 @@ export interface KnowledgeTopic {
   required_knowledge_level: number;
   related_lessons: string[] | null;
   related_tests: string[] | null;
+  sort_order: number;
   created_at: string;
+}
+
+export interface TopicPositionLink {
+  topic_id: string;
+  position_id: string;
+  position_name: string;
+  is_required: boolean;
 }
 
 export interface KnowledgeTopicCreate {
@@ -236,6 +256,9 @@ export interface Lesson {
   duration_minutes: number | null;
   video_url: string | null;
   status: LessonStatus;
+  sort_order: number;
+  /** Present in lesson lists: types of attached materials. */
+  material_types?: MaterialType[];
   created_at: string;
   updated_at: string;
 }
@@ -258,7 +281,9 @@ export interface LessonCreate {
   external_links?: Array<{ title: string; url: string }>;
 }
 
-export interface LessonUpdate extends Partial<LessonCreate> {
+export interface LessonUpdate extends Partial<Omit<LessonCreate, "topic_id">> {
+  /** null moves the lesson to "Без блока". */
+  topic_id?: string | null;
   status?: LessonStatus;
 }
 

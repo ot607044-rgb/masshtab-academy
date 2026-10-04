@@ -1,0 +1,47 @@
+.page { max-width: 1200px; margin: 0 auto; }
+.welcome { display: flex; gap: 22px; padding: 32px; background: #edf6f3; border: 1px solid #d1e8df; border-radius: 12px; margin-bottom: 34px; }
+.compass { display: grid; place-items: center; flex: 0 0 62px; height: 62px; background: #fff; border-radius: 16px; color: #087f75; }
+.eyebrow { color: #08756c; font-size: 11px; font-weight: 650; letter-spacing: .08em; }
+.welcome h2 { font-size: clamp(21px, 2.3vw, 28px); line-height: 1.3; max-width: 640px; margin: 10px 0 12px; }
+.welcome p { line-height: 1.7; color: #4f6261; font-size: 14px; margin-bottom: 22px; max-width: 640px; }
+.hint { display: inline-block; font-size: 12px; color: #526b64; margin: 12px 0 0 14px; }
+.sectionHeading { margin: 28px 0 18px; }
+.sectionHeading h2 { font-size: 19px; margin-bottom: 8px; }
+.sectionHeading p, .footer p { color: #67717c; font-size: 13px; line-height: 1.6; }
+.steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.steps li { display: flex; gap: 20px; padding: 24px; background: #fff; border: 1px solid #e0e6e8; border-radius: 10px; }
+.number { flex: 0 0 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #edf6f3; color: #08756c; font-size: 15px; font-weight: 650; }
+.steps h3, .shortcuts h3 { font-size: 15px; line-height: 1.5; margin-bottom: 8px; }
+.steps p, .shortcuts p { font-size: 13px; color: #596570; line-height: 1.75; max-width: 790px; }
+.steps .result { margin: 10px 0 16px; color: #3c665a; }
+.link { display: inline-flex; align-items: center; gap: 10px; color: #08756c; text-decoration: none; font-size: 13px; font-weight: 600; }
+.link:hover { text-decoration: underline; }
+.shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.shortcuts > a { display: block; padding: 22px; border: 1px solid #e0e6e8; background: #fff; border-radius: 10px; color: inherit; text-decoration: none; }
+.shortcuts > a:hover { border-color: #087f75; background: #f8fcfa; }
+.shortcuts h3 { display: flex; justify-content: space-between; gap: 12px; }
+.shortcuts h3 svg { color: #087f75; flex-shrink: 0; margin-top: 3px; }
+.footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid #e0e6e8; padding-top: 24px; margin-top: 30px; }
+.footer strong { font-size: 13px; }
+.footer p { margin-top: 6px; }
+.footer button { flex-shrink: 0; }
+.tour { padding: 4px 0 12px; }
+.tour h3 { font-size: 21px; line-height: 1.4; }
+.tour p { font-size: 14px; color: #596570; line-height: 1.85; }
+.dots { display: flex; gap: 5px; margin-top: 14px; }
+.dots span { height: 4px; flex: 1; border-radius: 2px; background: #e3eae7; }
+.dots .activeDot { background: #087f75; }
+.tourActions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-top: 18px; }
+.tourActions > div { display: flex; gap: 8px; flex-wrap: wrap; }
+.tourActions button:disabled { opacity: .45; cursor: default; }
+.skip { background: transparent; color: #596570; font-size: 12px; text-decoration: underline; padding: 8px 0; }
+.page a:focus-visible, .page button:focus-visible { outline: 3px solid #087f75; outline-offset: 4px; }
+@media (max-width: 600px) {
+  .welcome { padding: 22px; gap: 14px; flex-direction: column; }
+  .compass { flex-basis: auto; width: 48px; height: 48px; }
+  .hint { display: block; margin-left: 0; }
+  .steps li { padding: 18px 14px; gap: 12px; }
+  .number { flex-basis: 28px; height: 28px; font-size: 13px; }
+  .shortcuts { grid-template-columns: 1fr; }
+  .footer { align-items: flex-start; flex-direction: column; }
+}

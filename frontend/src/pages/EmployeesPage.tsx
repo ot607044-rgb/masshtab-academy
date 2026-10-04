@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Plus, Trash2, Pencil } from "lucide-react";
+import { apiError } from "../api/workspace";
 import { getEmployees, createEmployee, deleteEmployee } from "../api/employees";
 import { getDepartments } from "../api/departments";
 import { getPositions } from "../api/positions";
@@ -6,7 +9,20 @@ import type { Employee, EmployeeCreate, Department, Position } from "../types";
 import { EMPLOYEE_STATUS_LABELS } from "../types";
 import { useAuth } from "../context/AuthContext";
 import CreateModal from "../components/CreateModal";
+import EmployeeEditModal from "../components/EmployeeEditModal";
+import { EmployeeAvatar } from "../components/EmployeePhoto";
 import styles from "./PageContent.module.css";
+import statusStyles from "./EmployeeStatusFilters.module.css";
+
+const STATUS_FILTERS = [
+  { value: "working", label: "Работающие" },
+  { value: "active", label: "Активные" },
+  { value: "probation", label: "Испытательный срок" },
+  { value: "vacation", label: "В отпуске" },
+  { value: "fired", label: "Уволенные" },
+  { value: "all", label: "Все" },
+] as const;
+const matchesStatus = (employee: Employee, status: string) => status === "all" || (status === "working" ? employee.status !== "fired" : employee.status === status);
 
 const STATUS_COLORS: Record<string, string> = {
   active: "statusGreen",
@@ -16,6 +32,9 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const EmployeesPage: React.FC = () => {
+  const [params, setParams] = useSearchParams();
+  const query = params.get("q") ?? "";
+  const [error, setError] = useState("");
   const { user } = useAuth();
   const canEdit = user?.role === "company_admin" || user?.role === "hr";
 
@@ -24,14 +43,21 @@ const EmployeesPage: React.FC = () => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [filterDept, setFilterDept] = useState("");
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const filterDept = params.get("department") ?? "";
+  const statusFilter = STATUS_FILTERS.find(item => item.value === params.get("status")) ?? STATUS_FILTERS[0];
+  const updateFilter = (key: string, value: string) => setParams(previous => {
+    const next = new URLSearchParams(previous);
+    if (value) next.set(key, value); else next.delete(key);
+    return next;
+  }, { replace: true });
 
   useEffect(() => {
     Promise.all([
       getEmployees().then(setEmployees),
       getDepartments().then(setDepartments),
       getPositions().then(setPositions),
-    ]).finally(() => setLoading(false));
+    ]).catch(e => setError(apiError(e))).finally(() => setLoading(false));
   }, []);
 
   const handleCreate = async (form: Record<string, string>) => {
@@ -51,8 +77,8 @@ const EmployeesPage: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Удалить сотрудника?")) return;
-    await deleteEmployee(id);
-    setEmployees((prev) => prev.filter((e) => e.id !== id));
+    try { await deleteEmployee(id); setEmployees((prev) => prev.filter((e) => e.id !== id)); }
+    catch (e) { setError(apiError(e)); }
   };
 
   const deptName = (id: string | null) =>
@@ -60,9 +86,10 @@ const EmployeesPage: React.FC = () => {
   const posName = (id: string | null) =>
     id ? (positions.find((p) => p.id === id)?.name ?? "—") : "—";
 
-  const filtered = filterDept
-    ? employees.filter((e) => e.department_id === filterDept)
-    : employees;
+  const matchingEmployees = employees.filter(e => (!filterDept || e.department_id === filterDept) && `${e.full_name} ${e.email ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const filtered = matchingEmployees.filter(e => matchesStatus(e, statusFilter.value));
+  const workingCount = employees.filter(e => e.status !== "fired").length;
+  const firedCount = employees.length - workingCount;
 
   const fields = [
     { name: "full_name", label: "ФИО *", required: true },
@@ -93,13 +120,15 @@ const EmployeesPage: React.FC = () => {
       <div className={styles.pageHeader}>
         <div>
           <h1 className={styles.title}>Сотрудники</h1>
-          <p className={styles.subtitle}>{filtered.length} из {employees.length}</p>
+          <p className={styles.subtitle} aria-live="polite">{loading ? "Загрузка сотрудников…" : `Работающие: ${workingCount} · Уволенные: ${firedCount}`}</p>
         </div>
         <div className={styles.headerActions}>
+          <input type="search" aria-label="Поиск сотрудников" placeholder="Имя или email" value={query} onChange={e => updateFilter("q", e.target.value)} />
           <select
             className={styles.filterSelect}
+            aria-label="Фильтр по отделу"
             value={filterDept}
-            onChange={(e) => setFilterDept(e.target.value)}
+            onChange={(e) => updateFilter("department", e.target.value)}
           >
             <option value="">Все отделы</option>
             {departments.map((d) => (
@@ -108,12 +137,20 @@ const EmployeesPage: React.FC = () => {
           </select>
           {canEdit && (
             <button className="btn-primary" onClick={() => setShowModal(true)}>
-              + Добавить сотрудника
+              <Plus size={16} /> Добавить сотрудника
             </button>
           )}
         </div>
       </div>
 
+      {error && <p className="error-msg" role="alert">{error}</p>}
+      {!loading && <section className={statusStyles.section} aria-label="Фильтры сотрудников">
+        <div className={statusStyles.filters} role="group" aria-label="Статус сотрудников">
+          {STATUS_FILTERS.map(item => <button key={item.value} type="button" aria-pressed={statusFilter.value === item.value} onClick={() => updateFilter("status", item.value)}>{item.label} · {matchingEmployees.filter(e => matchesStatus(e, item.value)).length}</button>)}
+        </div>
+        <p className={statusStyles.hint}>Работающие — активные, на испытательном сроке и в отпуске. Уволенные хранятся отдельно.</p>
+        <p className={statusStyles.count} role="status">{statusFilter.label}: показано {filtered.length}{query || filterDept ? " · с учётом поиска и отдела" : ""}</p>
+      </section>}
       {loading ? (
         <div className={styles.loading}>Загрузка...</div>
       ) : (
@@ -133,7 +170,7 @@ const EmployeesPage: React.FC = () => {
             <tbody>
               {filtered.map((emp) => (
                 <tr key={emp.id}>
-                  <td className={styles.nameCell}>{emp.full_name}</td>
+                  <td className={styles.nameCell}><Link style={{ display: "inline-flex", alignItems: "center", gap: 10 }} to={`/dashboard/employees/${emp.id}`}><EmployeeAvatar employee={emp} />{emp.full_name}</Link></td>
                   <td>
                     <div className={styles.contactCell}>
                       {emp.email && <span>{emp.email}</span>}
@@ -153,14 +190,17 @@ const EmployeesPage: React.FC = () => {
                     </span>
                   </td>
                   {canEdit && (
-                    <td>
+                    <td><div className={styles.positionActions}>
+                      <button type="button" className={styles.positionEdit} title="Редактировать сотрудника" aria-label={`Редактировать сотрудника ${emp.full_name}`} onClick={() => setEditingEmployee(emp)}><Pencil size={17} aria-hidden="true" /></button>
                       <button
                         className="btn-danger"
+                        title="Удалить сотрудника"
+                        aria-label={`Удалить ${emp.full_name}`}
                         onClick={() => handleDelete(emp.id)}
                       >
-                        Удалить
+                        <Trash2 size={15} />
                       </button>
-                    </td>
+                    </div></td>
                   )}
                 </tr>
               ))}
@@ -180,6 +220,7 @@ const EmployeesPage: React.FC = () => {
           onCreate={handleCreate}
         />
       )}
+      {editingEmployee && <EmployeeEditModal employee={editingEmployee} onClose={() => setEditingEmployee(null)} onSaved={updated => setEmployees(prev => prev.map(emp => emp.id === updated.id ? updated : emp).sort((a, b) => a.full_name.localeCompare(b.full_name, "ru")))} />}
     </div>
   );
 };

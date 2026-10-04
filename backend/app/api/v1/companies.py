@@ -10,6 +10,7 @@ from app.models.company import Company
 from app.models.user import User, UserRole
 from app.api.deps import get_current_user, get_super_admin, check_company_access
 from app.core.security import get_password_hash
+from app.models.base import utc_now
 
 router = APIRouter()
 
@@ -57,6 +58,7 @@ async def create_company_with_admin(
         full_name=data.admin_full_name,
         role=UserRole.COMPANY_ADMIN,
         company_id=company.id,
+        activated_at=utc_now(),
     )
     db.add(admin)
     await db.commit()

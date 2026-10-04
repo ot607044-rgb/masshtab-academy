@@ -1,0 +1,6 @@
+ARG BASE_IMAGE=masshtab-academy-backend:rollback-20261004-employee-photo
+FROM ${BASE_IMAGE}
+RUN pip install --no-cache-dir Pillow==12.3.0
+# Preserve the private directory guard even when rolling back the photo feature.
+COPY backend/app/core/employee_photos.py /app/app/core/employee_photos.py
+COPY backend/app/main.py /app/app/main.py

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { getPositions, createPosition, deletePosition } from "../api/positions";
+import { getPositions, createPosition, updatePosition, deletePosition } from "../api/positions";
+import { Pencil, Plus, X } from "lucide-react";
 import { getDepartments } from "../api/departments";
 import type { Position, Department } from "../types";
 import { useAuth } from "../context/AuthContext";
@@ -14,6 +15,7 @@ const PositionsPage: React.FC = () => {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingPosition, setEditingPosition] = useState<Position | null>(null);
   const [skillInput, setSkillInput] = useState("");
   const [skills, setSkills] = useState<string[]>([]);
 
@@ -24,16 +26,39 @@ const PositionsPage: React.FC = () => {
     ]).finally(() => setLoading(false));
   }, []);
 
-  const handleCreate = async (form: Record<string, string>) => {
-    const created = await createPosition({
-      name: form.name,
-      description: form.description || undefined,
-      department_id: form.department_id || undefined,
-      required_skills: skills.length ? skills : undefined,
-    });
-    setPositions((prev) => [...prev, created]);
-    setSkills([]);
+  const closeModal = () => {
     setShowModal(false);
+    setEditingPosition(null);
+    setSkills([]);
+    setSkillInput("");
+  };
+
+  const openModal = (position: Position | null = null) => {
+    setEditingPosition(position);
+    setSkills(position?.required_skills ? [...position.required_skills] : []);
+    setSkillInput("");
+    setShowModal(true);
+  };
+
+  const addSkill = () => {
+    const value = skillInput.trim();
+    if (value && !skills.includes(value)) setSkills(prev => [...prev, value]);
+    setSkillInput("");
+  };
+
+  const handleSave = async (form: Record<string, string>) => {
+    const name = form.name.trim();
+    if (!name) throw { response: { data: { detail: "Введите название должности" } } };
+    const payload = {
+      name,
+      description: form.description.trim() || null,
+      department_id: form.department_id || null,
+      required_skills: [...new Set([...skills, skillInput.trim()].filter(Boolean))],
+    };
+    const saved = editingPosition ? await updatePosition(editingPosition.id, payload) : await createPosition(payload);
+    setPositions(prev => (editingPosition ? prev.map(pos => pos.id === saved.id ? saved : pos) : [...prev, saved]).sort((a, b) => a.name.localeCompare(b.name, "ru")));
+    setSkills([]);
+    closeModal();
   };
 
   const handleDelete = async (id: string) => {
@@ -46,7 +71,7 @@ const PositionsPage: React.FC = () => {
     id ? (departments.find((d) => d.id === id)?.name ?? "—") : "—";
 
   const fields = [
-    { name: "name", label: "Название должности *", required: true },
+    { name: "name", label: "Название должности *", required: true, maxLength: 255 },
     { name: "description", label: "Описание" },
     {
       name: "department_id", label: "Отдел", type: "select",
@@ -65,8 +90,8 @@ const PositionsPage: React.FC = () => {
           <p className={styles.subtitle}>{positions.length} должностей</p>
         </div>
         {canEdit && (
-          <button className="btn-primary" onClick={() => { setSkills([]); setShowModal(true); }}>
-            + Создать должность
+          <button className="btn-primary" onClick={() => openModal()}>
+            <Plus size={16} aria-hidden="true" /> Создать должность
           </button>
         )}
       </div>
@@ -96,17 +121,20 @@ const PositionsPage: React.FC = () => {
                   <td>{deptName(pos.department_id)}</td>
                   <td>
                     <div className={styles.tagList}>
-                      {pos.required_skills?.map((s) => (
+                      {pos.required_skills?.length ? pos.required_skills.map((s) => (
                         <span key={s} className={styles.tag}>{s}</span>
-                      )) ?? <span className={styles.muted}>—</span>}
+                      )) : <span className={styles.muted}>—</span>}
                     </div>
                   </td>
                   {canEdit && (
-                    <td>
+                    <td><div className={styles.positionActions}>
+                      <button type="button" className={styles.positionEdit} onClick={() => openModal(pos)} title="Редактировать должность" aria-label={`Редактировать должность ${pos.name}`}>
+                        <Pencil size={17} aria-hidden="true" />
+                      </button>
                       <button className="btn-danger" onClick={() => handleDelete(pos.id)}>
                         Удалить
                       </button>
-                    </td>
+                    </div></td>
                   )}
                 </tr>
               ))}
@@ -120,33 +148,38 @@ const PositionsPage: React.FC = () => {
 
       {showModal && (
         <CreateModal
-          title="Новая должность"
+          title={editingPosition ? "Редактирование должности" : "Новая должность"}
           fields={fields}
-          onClose={() => setShowModal(false)}
-          onCreate={handleCreate}
+          onClose={closeModal}
+          onCreate={handleSave}
+          initialValues={editingPosition ? { name: editingPosition.name, description: editingPosition.description ?? "", department_id: editingPosition.department_id ?? "" } : undefined}
+          submitLabel={editingPosition ? "Сохранить" : "Создать"}
+          errorMessage="Не удалось сохранить должность"
           extraContent={
             <div className="form-group">
               <label>Обязательные навыки</label>
               <div className={styles.skillInputRow}>
                 <input
+                  type="text"
+                  aria-label="Добавить навык"
                   value={skillInput}
                   onChange={(e) => setSkillInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && skillInput.trim()) {
+                    if (e.key === "Enter") {
                       e.preventDefault();
-                      setSkills((prev) => [...prev, skillInput.trim()]);
-                      setSkillInput("");
+                      addSkill();
                     }
                   }}
-                  placeholder="Введите навык и нажмите Enter"
+                  placeholder="Навык"
                 />
+                <button type="button" className={styles.positionEdit} onClick={addSkill} disabled={!skillInput.trim()} aria-label="Добавить введенный навык" title="Добавить навык"><Plus size={17} aria-hidden="true" /></button>
               </div>
               <div className={styles.tagList} style={{ marginTop: "0.5rem" }}>
                 {skills.map((s, i) => (
-                  <span key={i} className={`${styles.tag} ${styles.tagRemovable}`}
+                  <button type="button" key={i} className={`${styles.tag} ${styles.tagRemovable}`} aria-label={`Удалить навык ${s}`} title={`Удалить навык ${s}`}
                     onClick={() => setSkills((prev) => prev.filter((_, j) => j !== i))}>
-                    {s} ✕
-                  </span>
+                    {s} <X size={13} aria-hidden="true" />
+                  </button>
                 ))}
               </div>
             </div>

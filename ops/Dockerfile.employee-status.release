@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=masshtab-academy-frontend:rollback-20261004-employee-status
+FROM ${BASE_IMAGE}
+COPY frontend/dist /usr/share/nginx/html
+

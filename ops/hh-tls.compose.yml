@@ -1,0 +1,15 @@
+services:
+  tls:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    volumes:
+      - ./hh-tls.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - academy
+networks:
+  academy:
+    external: true
+    name: masshtab-academy_default

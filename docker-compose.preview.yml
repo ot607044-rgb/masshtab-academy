@@ -1,0 +1,36 @@
+# Isolated validation stack. Production services and volumes are not used.
+# docker compose -p academy-ui-preview -f docker-compose.preview.yml --env-file .env.preview up -d
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: preview
+      POSTGRES_PASSWORD: ${PREVIEW_DB_PASSWORD:?Set PREVIEW_DB_PASSWORD}
+      POSTGRES_DB: academy_ui_preview
+    volumes:
+      - preview_database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U preview -d academy_ui_preview"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+  backend:
+    image: masshtab-academy-backend:latest
+    entrypoint: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://preview:${PREVIEW_DB_PASSWORD}@db:5432/academy_ui_preview
+      SECRET_KEY: ${PREVIEW_SECRET_KEY:?Set PREVIEW_SECRET_KEY}
+      FIRST_SUPERADMIN_EMAIL: ${PREVIEW_ADMIN_EMAIL:-admin@preview.example.org}
+      FIRST_SUPERADMIN_PASSWORD: ${PREVIEW_ADMIN_PASSWORD:?Set PREVIEW_ADMIN_PASSWORD}
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+    volumes:
+      - ./backend:/app:ro
+      - preview_uploads:/app/uploads
+    ports:
+      - "127.0.0.1:18000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  preview_database:
+  preview_uploads:

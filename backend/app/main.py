@@ -2,15 +2,17 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from app.core.employee_photos import PublicUploads
 from sqlalchemy import select
 from app.database import engine, AsyncSessionLocal
 from app.models import Company, User  # noqa: ensures all models are registered
 from app.models.user import UserRole
 from app.core.security import get_password_hash
+from app.models.base import utc_now
 from app.config import settings
-from app.api.v1 import auth, companies, users, departments, positions, employees, knowledge, lessons, assignments, support, tests, notifications, analytics
+from app.api.v1 import auth, companies, users, departments, positions, employees, knowledge, lessons, assignments, support, tests, notifications, analytics, custom_fields, custom_sections, statuses, integrations
 import uuid
+from app.api.v1 import recruitment, workspace, access
 
 
 async def _create_superadmin() -> None:
@@ -25,6 +27,7 @@ async def _create_superadmin() -> None:
             full_name="Super Administrator",
             role=UserRole.SUPER_ADMIN,
             is_active=True,
+            activated_at=utc_now(),
         )
         db.add(superadmin)
         await db.commit()
@@ -64,7 +67,7 @@ app.add_middleware(
 
 # Serve uploaded files statically
 os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
+app.mount("/uploads", PublicUploads(directory=settings.UPLOADS_DIR), name="uploads")
 
 app.include_router(auth.router,        prefix="/api/v1/auth",        tags=["auth"])
 app.include_router(companies.router,   prefix="/api/v1/companies",   tags=["companies"])
@@ -79,6 +82,13 @@ app.include_router(support.router,       prefix="/api/v1/support",        tags=[
 app.include_router(tests.router,         prefix="/api/v1/tests",          tags=["tests"])
 app.include_router(notifications.router, prefix="/api/v1/notifications",  tags=["notifications"])
 app.include_router(analytics.router,     prefix="/api/v1/analytics",      tags=["analytics"])
+app.include_router(custom_fields.router,   prefix="/api/v1/custom-fields",   tags=["custom-fields"])
+app.include_router(custom_sections.router, prefix="/api/v1/custom-sections", tags=["custom-sections"])
+app.include_router(statuses.router,        prefix="/api/v1/statuses",         tags=["statuses"])
+app.include_router(integrations.router,    prefix="/api/v1/integrations",     tags=["integrations"])
+app.include_router(recruitment.router, prefix="/api/v1/recruitment", tags=["recruitment"])
+app.include_router(workspace.router, prefix="/api/v1/workspace", tags=["workspace"])
+app.include_router(access.router, prefix="/api/v1/access", tags=["access"])
 
 
 @app.get("/health", tags=["system"])

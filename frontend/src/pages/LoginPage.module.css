@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  background: linear-gradient(125deg, #e5f1e9, #faf8f5 45%, #ede8fb);
   padding: 1rem;
 }
 
@@ -13,7 +13,7 @@
   padding: 2.75rem;
   width: 100%;
   max-width: 420px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 24px 64px rgba(76, 56, 112, 0.09);
   text-align: center;
 }
 

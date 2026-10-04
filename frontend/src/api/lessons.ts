@@ -25,6 +25,11 @@ export const updateLesson = async (id: string, payload: LessonUpdate) => {
   return data;
 };
 
+/** Set the study order inside one block; topicId null is "Без блока". */
+export const reorderLessons = async (topicId: string | null, ids: string[]) => {
+  await client.post("/api/v1/lessons/reorder", { topic_id: topicId, ids });
+};
+
 export const publishLesson = async (id: string) => {
   const { data } = await client.post(`/api/v1/lessons/${id}/publish`);
   return data;

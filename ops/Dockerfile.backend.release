@@ -1,0 +1,6 @@
+ARG BASE_IMAGE=masshtab-academy-backend:rollback-20261004-ui
+FROM ${BASE_IMAGE}
+WORKDIR /app
+COPY backend/app ./app
+COPY backend/alembic ./alembic
+COPY backend/alembic.ini ./alembic.ini

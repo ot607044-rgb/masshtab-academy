@@ -57,6 +57,7 @@ class Lesson(Base, TimestampMixin):
     duration_minutes = Column(Integer, nullable=True)
     video_url = Column(String(2048), nullable=True)
     external_links = Column(JSON, nullable=True)           # list[{title, url}]
+    sort_order = Column(Integer, default=0, server_default="0", nullable=False)  # position inside the topic block
 
     # stored as VARCHAR via native_enum=False to avoid PG enum-type conflicts
     status = Column(
@@ -71,6 +72,11 @@ class Lesson(Base, TimestampMixin):
     assignments = relationship(
         "LessonAssignment", back_populates="lesson", cascade="all, delete-orphan"
     )
+
+    @property
+    def material_types(self) -> list[str]:
+        """Material types for library cards; requires materials to be eager-loaded."""
+        return [m.material_type.value if hasattr(m.material_type, "value") else m.material_type for m in self.materials]
 
 
 class LessonMaterial(Base, TimestampMixin):

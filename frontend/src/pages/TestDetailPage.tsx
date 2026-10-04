@@ -197,7 +197,7 @@ const TestDetailPage: React.FC = () => {
       {/* Tabs */}
       {canEdit && (
         <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem" }}>
-          {(["questions", "results"] as const).map((t) => (
+          {(user?.role === "methodologist" ? ["questions"] as const : ["questions", "results"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} style={{
               padding: "0.5rem 1.25rem",
               border: "1.5px solid",

@@ -8,6 +8,7 @@ from app.database import AsyncSessionLocal, engine, Base
 from app.models import Company, User
 from app.models.user import UserRole
 from app.core.security import get_password_hash
+from app.models.base import utc_now
 
 
 async def seed():
@@ -25,19 +26,19 @@ async def seed():
         users = [
             User(id=uuid.uuid4(), email="admin@alpha-tech.ru",
                  hashed_password=get_password_hash("Admin123!"),
-                 full_name="Иван Иванов", role=UserRole.COMPANY_ADMIN, company_id=company1.id),
+                 full_name="Иван Иванов", role=UserRole.COMPANY_ADMIN, company_id=company1.id, activated_at=utc_now()),
             User(id=uuid.uuid4(), email="hr@alpha-tech.ru",
                  hashed_password=get_password_hash("Hr123!"),
-                 full_name="Мария Петрова", role=UserRole.HR, company_id=company1.id),
+                 full_name="Мария Петрова", role=UserRole.HR, company_id=company1.id, activated_at=utc_now()),
             User(id=uuid.uuid4(), email="employee@alpha-tech.ru",
                  hashed_password=get_password_hash("Emp123!"),
-                 full_name="Алексей Сидоров", role=UserRole.EMPLOYEE, company_id=company1.id),
+                 full_name="Алексей Сидоров", role=UserRole.EMPLOYEE, company_id=company1.id, activated_at=utc_now()),
             User(id=uuid.uuid4(), email="admin@beta-service.ru",
                  hashed_password=get_password_hash("Admin123!"),
-                 full_name="Сергей Козлов", role=UserRole.COMPANY_ADMIN, company_id=company2.id),
+                 full_name="Сергей Козлов", role=UserRole.COMPANY_ADMIN, company_id=company2.id, activated_at=utc_now()),
             User(id=uuid.uuid4(), email="employee@beta-service.ru",
                  hashed_password=get_password_hash("Emp123!"),
-                 full_name="Анна Новикова", role=UserRole.EMPLOYEE, company_id=company2.id),
+                 full_name="Анна Новикова", role=UserRole.EMPLOYEE, company_id=company2.id, activated_at=utc_now()),
         ]
         db.add_all(users)
         await db.commit()

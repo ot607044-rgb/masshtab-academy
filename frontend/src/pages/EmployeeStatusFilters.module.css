@@ -1,0 +1,9 @@
+.section { margin-bottom: 20px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.filters button { padding: 10px 14px; border: 1px solid #d9e2df; border-radius: 7px; background: #fff; color: #52615d; font: inherit; font-size: 13px; line-height: 1.5; }
+.filters button:hover { background: #f0f7f4; }
+.filters button[aria-pressed="true"] { background: #d9eee4; border-color: #bddbc9; color: #236653; font-weight: 600; }
+.filters button:focus-visible { outline: 3px solid #087f75; outline-offset: 3px; }
+.hint { margin: 12px 0 8px; font-size: 12px; color: #66746f; line-height: 1.6; }
+.count { font-size: 13px; color: #344b43; }
+@media (max-width: 640px) { .filters button { flex: 1 1 auto; } }

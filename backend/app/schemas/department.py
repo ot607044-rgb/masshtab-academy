@@ -1,19 +1,28 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints, field_validator
 from uuid import UUID
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
+
+DepartmentName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 
 
 class DepartmentCreate(BaseModel):
-    name: str
+    name: DepartmentName
     description: Optional[str] = None
     head_id: Optional[UUID] = None
 
 
 class DepartmentUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[DepartmentName] = None
     description: Optional[str] = None
     head_id: Optional[UUID] = None
+
+    @field_validator("name")
+    @classmethod
+    def name_cannot_be_null(cls, value):
+        if value is None:
+            raise ValueError("Название отдела обязательно")
+        return value
 
 
 class DepartmentResponse(BaseModel):

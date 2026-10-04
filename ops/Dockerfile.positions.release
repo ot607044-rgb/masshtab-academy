@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=masshtab-academy-backend:rollback-20261004-positions
+FROM ${BASE_IMAGE}
+COPY backend/app/api/v1/positions.py /app/app/api/v1/positions.py
+COPY backend/app/schemas/position.py /app/app/schemas/position.py

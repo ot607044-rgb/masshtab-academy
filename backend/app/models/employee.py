@@ -21,6 +21,11 @@ class Employee(Base, TimestampMixin):
     full_name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=True)
     phone = Column(String(50), nullable=True)
+    photo_filename = Column(String(255), nullable=True)
+
+    @property
+    def photo_url(self):
+        return f"/api/v1/employees/{self.id}/photo?v={self.photo_filename}" if self.photo_filename else None
 
     company_id = Column(
         UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"),

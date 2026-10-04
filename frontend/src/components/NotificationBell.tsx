@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Bell } from "lucide-react";
 import {
   getNotifications,
   getUnreadCount,
@@ -15,6 +16,7 @@ const NotificationBell: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
 
   const refreshCount = useCallback(async () => {
@@ -51,9 +53,12 @@ const NotificationBell: React.FC = () => {
     }
     setOpen(true);
     setLoading(true);
+    setError("");
     try {
       const data = await getNotifications(30);
       setItems(data);
+    } catch {
+      setError("Не удалось загрузить уведомления");
     } finally {
       setLoading(false);
     }
@@ -79,6 +84,8 @@ const NotificationBell: React.FC = () => {
       <button
         onClick={handleOpen}
         title="Уведомления"
+        aria-label="Уведомления"
+        aria-expanded={open}
         style={{
           background: "none",
           border: "none",
@@ -87,11 +94,11 @@ const NotificationBell: React.FC = () => {
           position: "relative",
           padding: "0.25rem 0.5rem",
           borderRadius: "8px",
-          color: open ? "#6366f1" : "#6b7280",
+          color: open ? "#087f75" : "#717982",
           transition: "color 0.15s",
         }}
       >
-        🔔
+        <Bell size={19} strokeWidth={1.7} />
         {count > 0 && (
           <span
             style={{
@@ -123,12 +130,12 @@ const NotificationBell: React.FC = () => {
             position: "absolute",
             top: "calc(100% + 8px)",
             right: 0,
-            width: "360px",
+            width: "min(360px, calc(100vw - 32px))",
             maxHeight: "480px",
             overflowY: "auto",
             background: "#fff",
             border: "1px solid #e5e7eb",
-            borderRadius: "12px",
+            borderRadius: "6px",
             boxShadow: "0 10px 40px rgba(0,0,0,0.12)",
             zIndex: 9999,
           }}
@@ -173,7 +180,7 @@ const NotificationBell: React.FC = () => {
                   border: "none",
                   cursor: "pointer",
                   fontSize: "0.75rem",
-                  color: "#6366f1",
+                  color: "#087f75",
                   fontWeight: 500,
                 }}
               >
@@ -183,7 +190,7 @@ const NotificationBell: React.FC = () => {
           </div>
 
           {/* Body */}
-          {loading ? (
+          {error ? <p className="error-msg" role="alert">{error}</p> : loading ? (
             <div style={{ padding: "1.5rem", textAlign: "center", color: "#9ca3af", fontSize: "0.85rem" }}>
               Загрузка...
             </div>
@@ -201,7 +208,7 @@ const NotificationBell: React.FC = () => {
                   gap: "0.75rem",
                   padding: "0.75rem 1rem",
                   borderBottom: "1px solid #f9fafb",
-                  background: n.is_read ? "#fff" : "#f0f0ff",
+                  background: n.is_read ? "#fff" : "#e6f4f1",
                   cursor: n.is_read ? "default" : "pointer",
                   transition: "background 0.15s",
                 }}
@@ -229,7 +236,7 @@ const NotificationBell: React.FC = () => {
                           width: "8px",
                           height: "8px",
                           borderRadius: "50%",
-                          background: "#6366f1",
+                          background: "#087f75",
                           flexShrink: 0,
                           marginTop: "4px",
                         }}

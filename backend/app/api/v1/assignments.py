@@ -13,7 +13,7 @@ from app.schemas.lesson import AssignmentCreate, AssignmentStatusUpdate, Assignm
 from app.models.lesson import LessonAssignment, AssignmentStatus, Lesson, LessonStatus
 from app.models.employee import Employee
 from app.models.user import UserRole
-from app.api.deps import get_hr_or_above, get_any_company_user, get_effective_company_id
+from app.api.deps import HR_ROLES, get_hr_or_above, get_any_company_user, get_effective_company_id, own_employee
 
 router = APIRouter()
 
@@ -129,6 +129,7 @@ async def update_assignment_status(
     assignment_id: uuid.UUID,
     data: AssignmentStatusUpdate,
     current_user=Depends(get_any_company_user),
+    effective_company_id: UUID = Depends(get_effective_company_id),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(LessonAssignment).where(LessonAssignment.id == assignment_id))
@@ -136,21 +137,17 @@ async def update_assignment_status(
     if not assignment:
         raise HTTPException(status_code=404, detail="Назначение не найдено")
 
-    if current_user.role == UserRole.EMPLOYEE:
-        emp_r = await db.execute(
-            select(Employee).where(
-                Employee.user_id == current_user.id,
-                Employee.id == assignment.employee_id,
-            )
-        )
-        if not emp_r.scalar_one_or_none():
-            raise HTTPException(status_code=403, detail="Доступ запрещён")
-    elif current_user.role != UserRole.SUPER_ADMIN and assignment.company_id != current_user.company_id:
+    if assignment.company_id != effective_company_id:
         raise HTTPException(status_code=403, detail="Доступ запрещён")
+    # HR manages any assignment; everyone else only marks progress on their own
+    if current_user.role not in HR_ROLES:
+        me = await own_employee(db, current_user, effective_company_id)
+        if me is None or me.id != assignment.employee_id:
+            raise HTTPException(status_code=403, detail="Доступ запрещён")
 
     assignment.status = data.status
     if data.status == AssignmentStatus.COMPLETED:
-        assignment.completed_at = data.completed_at or datetime.now(timezone.utc).isoformat()
+        assignment.completed_at = data.completed_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
     await db.commit()
 
     loaded = await db.execute(_load_assignment_q(LessonAssignment.id == assignment_id))

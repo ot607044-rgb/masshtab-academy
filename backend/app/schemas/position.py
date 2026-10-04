@@ -1,21 +1,30 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints, field_validator
 from uuid import UUID
 from datetime import datetime
-from typing import Optional, List
+from typing import Annotated, Optional, List
+
+PositionName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 
 
 class PositionCreate(BaseModel):
-    name: str
+    name: PositionName
     description: Optional[str] = None
     department_id: Optional[UUID] = None
     required_skills: Optional[List[str]] = None
 
 
 class PositionUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[PositionName] = None
     description: Optional[str] = None
     department_id: Optional[UUID] = None
     required_skills: Optional[List[str]] = None
+
+    @field_validator("name")
+    @classmethod
+    def name_cannot_be_null(cls, value):
+        if value is None:
+            raise ValueError("Название должности обязательно")
+        return value
 
 
 class PositionResponse(BaseModel):

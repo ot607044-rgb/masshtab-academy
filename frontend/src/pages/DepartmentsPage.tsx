@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { getDepartments, createDepartment, deleteDepartment } from "../api/departments";
+import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from "../api/departments";
+import { Pencil, Plus } from "lucide-react";
 import { getEmployees } from "../api/employees";
 import type { Department, Employee } from "../types";
 import { useAuth } from "../context/AuthContext";
@@ -14,6 +15,7 @@ const DepartmentsPage: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -22,14 +24,23 @@ const DepartmentsPage: React.FC = () => {
     ]).finally(() => setLoading(false));
   }, []);
 
-  const handleCreate = async (form: Record<string, string>) => {
-    const created = await createDepartment({
-      name: form.name,
-      description: form.description || undefined,
-      head_id: form.head_id || undefined,
-    });
-    setDepartments((prev) => [...prev, created]);
+  const closeModal = () => {
     setShowModal(false);
+    setEditingDepartment(null);
+  };
+
+  const openModal = (department: Department | null = null) => {
+    setEditingDepartment(department);
+    setShowModal(true);
+  };
+
+  const handleSave = async (form: Record<string, string>) => {
+    const name = form.name.trim();
+    if (!name) throw { response: { data: { detail: "Введите название отдела" } } };
+    const payload = { name, description: form.description.trim() || null, head_id: form.head_id || null };
+    const saved = editingDepartment ? await updateDepartment(editingDepartment.id, payload) : await createDepartment(payload);
+    setDepartments(prev => (editingDepartment ? prev.map(dept => dept.id === saved.id ? saved : dept) : [...prev, saved]).sort((a, b) => a.name.localeCompare(b.name, "ru")));
+    closeModal();
   };
 
   const handleDelete = async (id: string) => {
@@ -45,7 +56,7 @@ const DepartmentsPage: React.FC = () => {
     employees.filter((e) => e.department_id === deptId).length;
 
   const fields = [
-    { name: "name", label: "Название отдела *", required: true },
+    { name: "name", label: "Название отдела *", required: true, maxLength: 255 },
     { name: "description", label: "Описание" },
     {
       name: "head_id", label: "Руководитель", type: "select",
@@ -64,8 +75,8 @@ const DepartmentsPage: React.FC = () => {
           <p className={styles.subtitle}>{departments.length} отделов</p>
         </div>
         {canEdit && (
-          <button className="btn-primary" onClick={() => setShowModal(true)}>
-            + Создать отдел
+          <button className="btn-primary" onClick={() => openModal()}>
+            <Plus size={16} aria-hidden="true" /> Создать отдел
           </button>
         )}
       </div>
@@ -87,7 +98,10 @@ const DepartmentsPage: React.FC = () => {
                 <span>Руководитель: <strong>{headName(dept.head_id)}</strong></span>
               </div>
               {canEdit && (
-                <div className={styles.cardActions}>
+                <div className={`${styles.cardActions} ${styles.positionActions}`}>
+                  <button type="button" className={styles.positionEdit} onClick={() => openModal(dept)} title="Редактировать отдел" aria-label={`Редактировать отдел ${dept.name}`}>
+                    <Pencil size={17} aria-hidden="true" />
+                  </button>
                   <button className="btn-danger" onClick={() => handleDelete(dept.id)}>
                     Удалить
                   </button>
@@ -103,10 +117,13 @@ const DepartmentsPage: React.FC = () => {
 
       {showModal && (
         <CreateModal
-          title="Новый отдел"
+          title={editingDepartment ? "Редактирование отдела" : "Новый отдел"}
           fields={fields}
-          onClose={() => setShowModal(false)}
-          onCreate={handleCreate}
+          onClose={closeModal}
+          onCreate={handleSave}
+          initialValues={editingDepartment ? { name: editingDepartment.name, description: editingDepartment.description ?? "", head_id: editingDepartment.head_id ?? "" } : undefined}
+          submitLabel={editingDepartment ? "Сохранить" : "Создать"}
+          errorMessage="Не удалось сохранить отдел"
         />
       )}
     </div>

@@ -1,0 +1,5 @@
+services:
+  backend:
+    image: masshtab-academy-backend:rollback-20261004-departments
+  frontend:
+    image: masshtab-academy-frontend:rollback-20261004-departments

@@ -6,17 +6,18 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.schemas.lesson import (
     LessonCreate, LessonUpdate, LessonResponse, LessonDetailResponse,
-    LessonMaterialResponse, MaterialLinkCreate,
+    LessonMaterialResponse, MaterialLinkCreate, LessonListItem, LessonReorder,
 )
 from app.models.lesson import Lesson, LessonMaterial, LessonStatus, MaterialType
+from app.models.knowledge import KnowledgeTopic
 from app.models.user import UserRole
-from app.api.deps import get_content_creator, get_any_company_user, get_effective_company_id
+from app.api.deps import CONTENT_ROLES, get_content_creator, get_any_company_user, get_effective_company_id
 from app.config import settings
 
 router = APIRouter()
@@ -44,20 +45,41 @@ def _get_material_type_from_ext(ext: str) -> MaterialType:
     return MaterialType.TEXT
 
 
+# Fields that may be cleared with an explicit null; others ignore null.
+NULLABLE_LESSON_FIELDS = {
+    "description", "text_content", "position_id", "topic_id",
+    "difficulty_level", "duration_minutes", "video_url", "external_links",
+}
+
+
+async def _check_topic(db: AsyncSession, topic_id: Optional[UUID], company_id: UUID) -> None:
+    if topic_id is None:
+        return
+    topic = await db.get(KnowledgeTopic, topic_id)
+    if not topic or topic.company_id != company_id:
+        raise HTTPException(status_code=400, detail="Блок не найден")
+
+
+async def _next_sort_order(db: AsyncSession, company_id: UUID, topic_id: Optional[UUID]) -> int:
+    q = select(func.max(Lesson.sort_order)).where(Lesson.company_id == company_id)
+    q = q.where(Lesson.topic_id.is_(None) if topic_id is None else Lesson.topic_id == topic_id)
+    return ((await db.execute(q)).scalar() or 0) + 1
+
+
 # ── List / Create ─────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=List[LessonResponse])
+@router.get("/", response_model=List[LessonListItem])
 async def list_lessons(
     status_filter: Optional[str] = None,
-    position_id: Optional[str] = None,
-    topic_id: Optional[str] = None,
+    position_id: Optional[UUID] = None,
+    topic_id: Optional[UUID] = None,
     current_user=Depends(get_any_company_user),
     effective_company_id: UUID = Depends(get_effective_company_id),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(Lesson).where(Lesson.company_id == effective_company_id)
+    q = select(Lesson).options(selectinload(Lesson.materials)).where(Lesson.company_id == effective_company_id)
 
-    if current_user.role == UserRole.EMPLOYEE:
+    if current_user.role not in CONTENT_ROLES:
         q = q.where(Lesson.status == LessonStatus.PUBLISHED)
     elif status_filter:
         q = q.where(Lesson.status == status_filter)
@@ -67,8 +89,28 @@ async def list_lessons(
     if topic_id:
         q = q.where(Lesson.topic_id == topic_id)
 
-    result = await db.execute(q.order_by(Lesson.created_at.desc()))
+    result = await db.execute(q.order_by(Lesson.sort_order, Lesson.created_at))
     return result.scalars().all()
+
+
+@router.post("/reorder", status_code=status.HTTP_204_NO_CONTENT)
+async def reorder_lessons(
+    data: LessonReorder,
+    current_user=Depends(get_content_creator),
+    effective_company_id: UUID = Depends(get_effective_company_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set the study order of lessons inside one block (topic_id=null for "Без блока")."""
+    result = await db.execute(select(Lesson).where(Lesson.id.in_(data.ids)))
+    lessons = {lesson.id: lesson for lesson in result.scalars().all()}
+    if len(lessons) != len(set(data.ids)) or any(
+        lesson.company_id != effective_company_id or lesson.topic_id != data.topic_id
+        for lesson in lessons.values()
+    ):
+        raise HTTPException(status_code=400, detail="Уроки не относятся к этому блоку")
+    for index, lesson_id in enumerate(data.ids, start=1):
+        lessons[lesson_id].sort_order = index
+    await db.commit()
 
 
 @router.post("/", response_model=LessonResponse, status_code=status.HTTP_201_CREATED)
@@ -78,6 +120,7 @@ async def create_lesson(
     effective_company_id: UUID = Depends(get_effective_company_id),
     db: AsyncSession = Depends(get_db),
 ):
+    await _check_topic(db, data.topic_id, effective_company_id)
     lesson = Lesson(
         id=uuid.uuid4(),
         title=data.title,
@@ -91,6 +134,7 @@ async def create_lesson(
         video_url=data.video_url,
         external_links=[link.model_dump() for link in data.external_links] if data.external_links else None,
         company_id=effective_company_id,
+        sort_order=await _next_sort_order(db, effective_company_id, data.topic_id),
     )
     db.add(lesson)
     await db.commit()
@@ -117,7 +161,7 @@ async def get_lesson(
         raise HTTPException(status_code=404, detail="Урок не найден")
     if lesson.company_id != effective_company_id:
         raise HTTPException(status_code=403, detail="Доступ запрещён")
-    if current_user.role == UserRole.EMPLOYEE and lesson.status != LessonStatus.PUBLISHED:
+    if current_user.role not in CONTENT_ROLES and lesson.status != LessonStatus.PUBLISHED:
         raise HTTPException(status_code=403, detail="Урок не опубликован")
     return lesson
 
@@ -137,8 +181,15 @@ async def update_lesson(
     if lesson.company_id != effective_company_id:
         raise HTTPException(status_code=403, detail="Доступ запрещён")
 
-    update_data = data.model_dump(exclude_none=True)
-    if "external_links" in update_data and update_data["external_links"] is not None:
+    update_data = {
+        field: value for field, value in data.model_dump(exclude_unset=True).items()
+        if value is not None or field in NULLABLE_LESSON_FIELDS
+    }
+    if "topic_id" in update_data and update_data["topic_id"] != lesson.topic_id:
+        await _check_topic(db, update_data["topic_id"], effective_company_id)
+        # Moved to another block: append to the end of its study order
+        update_data["sort_order"] = await _next_sort_order(db, effective_company_id, update_data["topic_id"])
+    if update_data.get("external_links") is not None:
         update_data["external_links"] = [
             lnk.model_dump() if hasattr(lnk, "model_dump") else lnk
             for lnk in data.external_links

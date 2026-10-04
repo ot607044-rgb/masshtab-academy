@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from uuid import UUID
@@ -8,12 +8,12 @@ import uuid
 from app.database import get_db
 from app.schemas.knowledge import (
     KnowledgeTopicCreate, KnowledgeTopicUpdate, KnowledgeTopicResponse,
-    PositionTopicCreate, PositionTopicResponse,
+    PositionTopicCreate, PositionTopicResponse, ReorderRequest, TopicPositionLink,
 )
 from app.models.knowledge import KnowledgeTopic, PositionTopic
 from app.models.position import Position
 from app.models.user import UserRole
-from app.api.deps import get_hr_or_above, get_any_company_user
+from app.api.deps import get_hr_or_above, get_any_company_user, get_content_creator, get_effective_company_id
 
 router = APIRouter()
 
@@ -22,21 +22,60 @@ router = APIRouter()
 @router.get("/topics", response_model=List[KnowledgeTopicResponse])
 async def list_topics(
     current_user=Depends(get_any_company_user),
+    effective_company_id: UUID = Depends(get_effective_company_id),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(KnowledgeTopic)
-    if current_user.role != UserRole.SUPER_ADMIN:
-        q = q.where(KnowledgeTopic.company_id == current_user.company_id)
-    result = await db.execute(q.order_by(KnowledgeTopic.name))
+    q = select(KnowledgeTopic).where(KnowledgeTopic.company_id == effective_company_id)
+    result = await db.execute(q.order_by(KnowledgeTopic.sort_order, KnowledgeTopic.name))
     return result.scalars().all()
+
+
+@router.post("/topics/reorder", status_code=status.HTTP_204_NO_CONTENT)
+async def reorder_topics(
+    data: ReorderRequest,
+    current_user=Depends(get_content_creator),
+    effective_company_id: UUID = Depends(get_effective_company_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set the order of library blocks."""
+    result = await db.execute(select(KnowledgeTopic).where(KnowledgeTopic.id.in_(data.ids)))
+    topics = {topic.id: topic for topic in result.scalars().all()}
+    if len(topics) != len(set(data.ids)) or any(t.company_id != effective_company_id for t in topics.values()):
+        raise HTTPException(status_code=400, detail="Блоки не найдены")
+    for index, topic_id in enumerate(data.ids, start=1):
+        topics[topic_id].sort_order = index
+    await db.commit()
+
+
+@router.get("/topic-positions", response_model=List[TopicPositionLink])
+async def list_topic_positions(
+    current_user=Depends(get_any_company_user),
+    effective_company_id: UUID = Depends(get_effective_company_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Which positions' training programs include each topic (whole knowledge matrix of the company)."""
+    result = await db.execute(
+        select(PositionTopic, Position.name)
+        .join(Position, Position.id == PositionTopic.position_id)
+        .where(PositionTopic.company_id == effective_company_id)
+        .order_by(Position.name)
+    )
+    return [
+        TopicPositionLink(topic_id=link.topic_id, position_id=link.position_id, position_name=name, is_required=link.is_required)
+        for link, name in result.all()
+    ]
 
 
 @router.post("/topics", response_model=KnowledgeTopicResponse, status_code=status.HTTP_201_CREATED)
 async def create_topic(
     data: KnowledgeTopicCreate,
-    current_user=Depends(get_hr_or_above),
+    current_user=Depends(get_content_creator),
+    effective_company_id: UUID = Depends(get_effective_company_id),
     db: AsyncSession = Depends(get_db),
 ):
+    last = await db.execute(
+        select(func.max(KnowledgeTopic.sort_order)).where(KnowledgeTopic.company_id == effective_company_id)
+    )
     topic = KnowledgeTopic(
         id=uuid.uuid4(),
         name=data.name,
@@ -46,7 +85,8 @@ async def create_topic(
         required_knowledge_level=data.required_knowledge_level,
         related_lessons=data.related_lessons,
         related_tests=data.related_tests,
-        company_id=current_user.company_id,
+        company_id=effective_company_id,
+        sort_order=(last.scalar() or 0) + 1,
     )
     db.add(topic)
     await db.commit()
@@ -58,7 +98,7 @@ async def create_topic(
 async def update_topic(
     topic_id: UUID,
     data: KnowledgeTopicUpdate,
-    current_user=Depends(get_hr_or_above),
+    current_user=Depends(get_content_creator),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(KnowledgeTopic).where(KnowledgeTopic.id == topic_id))
@@ -77,7 +117,7 @@ async def update_topic(
 @router.delete("/topics/{topic_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_topic(
     topic_id: UUID,
-    current_user=Depends(get_hr_or_above),
+    current_user=Depends(get_content_creator),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(KnowledgeTopic).where(KnowledgeTopic.id == topic_id))

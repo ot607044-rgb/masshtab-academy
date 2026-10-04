@@ -35,9 +35,21 @@ class KnowledgeTopicResponse(BaseModel):
     required_knowledge_level: int
     related_lessons: Optional[List[str]]
     related_tests: Optional[List[str]]
+    sort_order: int = 0
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ReorderRequest(BaseModel):
+    ids: List[UUID]
+
+
+class TopicPositionLink(BaseModel):
+    topic_id: UUID
+    position_id: UUID
+    position_name: str
+    is_required: bool
 
 
 class PositionTopicCreate(BaseModel):

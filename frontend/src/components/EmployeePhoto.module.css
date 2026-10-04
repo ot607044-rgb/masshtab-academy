@@ -1,0 +1,5 @@
+.avatar { display: inline-flex; width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%; overflow: hidden; align-items: center; justify-content: center; background: #edf3f2; color: #087f75; vertical-align: middle; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.large { width: 96px; height: 96px; flex-basis: 96px; }
+.photo { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; margin: 20px 0 28px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }

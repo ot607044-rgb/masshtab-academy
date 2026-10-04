@@ -7,10 +7,18 @@ import uuid
 from app.database import get_db
 from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
 from app.models.department import Department
+from app.models.employee import Employee
 from app.models.user import UserRole
 from app.api.deps import get_hr_or_above, get_any_company_user
 
 router = APIRouter()
+
+
+async def validate_head(db, head_id, company_id):
+    if head_id is not None:
+        head = await db.scalar(select(Employee.id).where(Employee.id == head_id, Employee.company_id == company_id))
+        if head is None:
+            raise HTTPException(status_code=404, detail="Руководитель не найден")
 
 
 def _company_filter(current_user, query):
@@ -35,6 +43,7 @@ async def create_department(
     current_user=Depends(get_hr_or_above),
     db: AsyncSession = Depends(get_db),
 ):
+    await validate_head(db, data.head_id, current_user.company_id)
     dept = Department(
         id=uuid.uuid4(),
         name=data.name,
@@ -76,7 +85,10 @@ async def update_department(
         raise HTTPException(status_code=404, detail="Отдел не найден")
     if current_user.role != UserRole.SUPER_ADMIN and dept.company_id != current_user.company_id:
         raise HTTPException(status_code=403, detail="Доступ запрещён")
-    for field, value in data.model_dump(exclude_none=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    if "head_id" in changes:
+        await validate_head(db, data.head_id, dept.company_id)
+    for field, value in changes.items():
         setattr(dept, field, value)
     await db.commit()
     await db.refresh(dept)

@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=masshtab-academy-backend:rollback-20261004-departments
+FROM ${BASE_IMAGE}
+COPY backend/app/api/v1/departments.py /app/app/api/v1/departments.py
+COPY backend/app/schemas/department.py /app/app/schemas/department.py

@@ -1,0 +1,11 @@
+ARG BASE_IMAGE=masshtab-academy-backend:rollback-20261004-employee-photo
+FROM ${BASE_IMAGE}
+RUN pip install --no-cache-dir Pillow==12.3.0
+COPY backend/app/core/employee_photos.py /app/app/core/employee_photos.py
+COPY backend/app/main.py /app/app/main.py
+COPY backend/app/models/employee.py /app/app/models/employee.py
+COPY backend/app/schemas/employee.py /app/app/schemas/employee.py
+COPY backend/app/api/v1/employees.py /app/app/api/v1/employees.py
+COPY backend/app/api/v1/workspace.py /app/app/api/v1/workspace.py
+COPY backend/alembic/versions/010_employee_photos.py /app/alembic/versions/010_employee_photos.py
+COPY backend/requirements.txt /app/requirements.txt

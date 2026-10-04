@@ -66,7 +66,7 @@ def upgrade() -> None:
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("active", "probation", "vacation", "fired", name="employeestatus"),
+            postgresql.ENUM("active", "probation", "vacation", "fired", name="employeestatus", create_type=False),
             nullable=False,
             server_default="active",
         ),

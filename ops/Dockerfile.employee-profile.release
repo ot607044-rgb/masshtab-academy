@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=masshtab-academy-backend:rollback-20261004-employee-profile
+FROM ${BASE_IMAGE}
+COPY backend/app/api/v1/employees.py /app/app/api/v1/employees.py
+COPY backend/app/schemas/employee.py /app/app/schemas/employee.py

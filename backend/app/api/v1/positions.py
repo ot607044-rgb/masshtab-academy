@@ -7,10 +7,18 @@ import uuid
 from app.database import get_db
 from app.schemas.position import PositionCreate, PositionUpdate, PositionResponse
 from app.models.position import Position
+from app.models.department import Department
 from app.models.user import UserRole
 from app.api.deps import get_hr_or_above, get_any_company_user
 
 router = APIRouter()
+
+
+async def validate_department(db, department_id, company_id):
+    if department_id is not None:
+        department = await db.scalar(select(Department.id).where(Department.id == department_id, Department.company_id == company_id))
+        if department is None:
+            raise HTTPException(status_code=404, detail="Отдел не найден")
 
 
 @router.get("/", response_model=List[PositionResponse])
@@ -34,6 +42,7 @@ async def create_position(
     current_user=Depends(get_hr_or_above),
     db: AsyncSession = Depends(get_db),
 ):
+    await validate_department(db, data.department_id, current_user.company_id)
     pos = Position(
         id=uuid.uuid4(),
         name=data.name,
@@ -76,7 +85,10 @@ async def update_position(
         raise HTTPException(status_code=404, detail="Должность не найдена")
     if current_user.role != UserRole.SUPER_ADMIN and pos.company_id != current_user.company_id:
         raise HTTPException(status_code=403, detail="Доступ запрещён")
-    for field, value in data.model_dump(exclude_none=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    if "department_id" in changes:
+        await validate_department(db, data.department_id, pos.company_id)
+    for field, value in changes.items():
         setattr(pos, field, value)
     await db.commit()
     await db.refresh(pos)

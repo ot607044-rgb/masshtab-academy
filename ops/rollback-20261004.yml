@@ -1,0 +1,6 @@
+services:
+  backend:
+    image: masshtab-academy-backend:rollback-20261004-ui
+    entrypoint: [gunicorn, app.main:app, -k, uvicorn.workers.UvicornWorker, -w, '2', --bind, '0.0.0.0:8000', --timeout, '120', --access-logfile, '-']
+  frontend:
+    image: masshtab-academy-frontend:rollback-20261004-ui

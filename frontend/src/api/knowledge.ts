@@ -11,6 +11,21 @@ export const createTopic = async (payload: KnowledgeTopicCreate) => {
   return data;
 };
 
+export const updateTopic = async (id: string, payload: Partial<KnowledgeTopicCreate>) => {
+  const { data } = await client.patch(`/api/v1/knowledge/topics/${id}`, payload);
+  return data;
+};
+
+export const reorderTopics = async (ids: string[]) => {
+  await client.post("/api/v1/knowledge/topics/reorder", { ids });
+};
+
+/** Positions whose training programs include each topic. */
+export const getTopicPositions = async () => {
+  const { data } = await client.get("/api/v1/knowledge/topic-positions");
+  return data;
+};
+
 export const deleteTopic = async (id: string) => {
   await client.delete(`/api/v1/knowledge/topics/${id}`);
 };

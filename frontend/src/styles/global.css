@@ -7,9 +7,9 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #f5f7fa;
-  color: #111827;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f6f7f9;
+  color: #20252b;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -37,8 +37,14 @@ body {
 }
 
 input[type="text"],
+input[type="tel"],
 input[type="email"],
 input[type="password"],
+input[type="search"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="number"],
+input[type="url"],
 textarea,
 select {
   width: 100%;
@@ -55,8 +61,8 @@ input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+  border-color: #087f75;
+  box-shadow: 0 0 0 3px rgba(8, 127, 117, 0.12);
 }
 
 /* Buttons */
@@ -70,13 +76,13 @@ button {
 }
 
 .btn-primary {
-  background: #6366f1;
+  background: #087f75;
   color: #fff;
   padding: 0.625rem 1.25rem;
 }
 
 .btn-primary:hover {
-  background: #4f46e5;
+  background: #066b62;
 }
 
 .btn-primary:disabled {
@@ -118,6 +124,12 @@ button {
 }
 
 /* Error message */
+button, input, textarea, select { font-family: inherit; letter-spacing: 0; }
+button:disabled { cursor: not-allowed; opacity: .6; }
+:focus-visible { outline: 2px solid #087f75; outline-offset: 3px; }
+.btn-primary, .btn-secondary, .btn-danger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; text-decoration: none; }
+.btn-primary svg, .btn-secondary svg { flex-shrink: 0; }
+
 .error-msg {
   background: #fee2e2;
   color: #dc2626;

@@ -18,7 +18,7 @@ from app.models.test import Test, Question, AnswerOption, TestAttempt, AttemptAn
 from app.models.employee import Employee
 from app.models.lesson import Lesson, LessonAssignment, LessonStatus
 from app.models.user import UserRole
-from app.api.deps import get_content_creator, get_any_company_user, get_effective_company_id
+from app.api.deps import CONTENT_ROLES, get_content_creator, get_any_company_user, get_effective_company_id, get_hr_or_above
 
 router = APIRouter()
 
@@ -111,7 +111,7 @@ async def list_tests(
     db: AsyncSession = Depends(get_db),
 ):
     q = select(Test).where(Test.company_id == effective_company_id)
-    if current_user.role == UserRole.EMPLOYEE:
+    if current_user.role not in CONTENT_ROLES:
         q = q.where(Test.status == "published")
     elif status_filter:
         q = q.where(Test.status == status_filter)
@@ -147,7 +147,7 @@ async def create_test(
     return _build_test_detail(loaded.scalar_one())
 
 
-@router.get("/{test_id}", response_model=TestDetailResponse)
+@router.get("/{test_id}", response_model=TestDetailResponse | TestForTakingResponse)
 async def get_test(
     test_id: UUID,
     current_user=Depends(get_any_company_user),
@@ -160,8 +160,11 @@ async def get_test(
         raise HTTPException(404, "Тест не найден")
     if test.company_id != effective_company_id:
         raise HTTPException(403, "Доступ запрещён")
-    if current_user.role == UserRole.EMPLOYEE and test.status != "published":
-        raise HTTPException(403, "Тест не опубликован")
+    if current_user.role not in CONTENT_ROLES:
+        if test.status != "published":
+            raise HTTPException(403, "Тест не опубликован")
+        # Correct answers are only for authors of tests
+        return _build_test_for_taking(test)
     return _build_test_detail(test)
 
 
@@ -180,8 +183,10 @@ async def update_test(
     if test.company_id != effective_company_id:
         raise HTTPException(403, "Доступ запрещён")
 
-    for field, value in data.model_dump(exclude_none=True).items():
-        setattr(test, field, value)
+    nullable_fields = {"description", "position_id", "topic_id", "lesson_id", "time_limit_minutes"}
+    for field, value in data.model_dump(exclude_unset=True).items():
+        if value is not None or field in nullable_fields:
+            setattr(test, field, value)
     test.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
@@ -636,7 +641,7 @@ async def my_attempts(
 @router.get("/{test_id}/results", response_model=List[AttemptSummary])
 async def test_results(
     test_id: UUID,
-    current_user=Depends(get_content_creator),
+    current_user=Depends(get_hr_or_above),
     effective_company_id: UUID = Depends(get_effective_company_id),
     db: AsyncSession = Depends(get_db),
 ):

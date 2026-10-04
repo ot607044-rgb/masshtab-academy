@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  signInWithToken: (token: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -31,11 +32,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     init();
   }, []);
 
+  const signInWithToken = async (token: string) => {
+    localStorage.setItem("access_token", token);
+    setUser(await getMe());
+  };
+
   const login = async (email: string, password: string) => {
     const data = await apiLogin(email, password);
-    localStorage.setItem("access_token", data.access_token);
-    const me = await getMe();
-    setUser(me);
+    await signInWithToken(data.access_token);
   };
 
   const logout = () => {
@@ -44,7 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signInWithToken, logout }}>
       {children}
     </AuthContext.Provider>
   );

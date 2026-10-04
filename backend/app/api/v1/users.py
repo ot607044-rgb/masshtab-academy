@@ -9,6 +9,7 @@ from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.models.user import User, UserRole
 from app.api.deps import get_current_user, get_company_admin_or_above, check_company_access
 from app.core.security import get_password_hash
+from app.models.base import utc_now
 
 router = APIRouter()
 
@@ -53,6 +54,7 @@ async def create_user(
         full_name=data.full_name,
         role=data.role,
         company_id=data.company_id,
+        activated_at=utc_now(),
     )
     db.add(user)
     await db.commit()
@@ -71,9 +73,9 @@ async def get_user(
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    # Enforce company isolation
-    if current_user.role != UserRole.SUPER_ADMIN:
-        if user.company_id != current_user.company_id:
+    # Own account, or an administrator of the same company
+    if current_user.role != UserRole.SUPER_ADMIN and user.id != current_user.id:
+        if current_user.role != UserRole.COMPANY_ADMIN or user.company_id != current_user.company_id:
             raise HTTPException(status_code=403, detail="Доступ запрещён")
     return user
 
@@ -90,8 +92,13 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    if current_user.role == UserRole.COMPANY_ADMIN and user.company_id != current_user.company_id:
-        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    if current_user.role == UserRole.COMPANY_ADMIN:
+        if user.company_id != current_user.company_id:
+            raise HTTPException(status_code=403, detail="Доступ запрещён")
+        if data.role == UserRole.SUPER_ADMIN:
+            raise HTTPException(status_code=403, detail="Нельзя назначить роль Super Admin")
+        if user.id == current_user.id and (data.role is not None or data.is_active is False):
+            raise HTTPException(status_code=409, detail="Нельзя изменить роль или заблокировать собственную учётную запись")
 
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(user, field, value)

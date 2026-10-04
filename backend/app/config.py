@@ -1,5 +1,4 @@
-from pydantic_settings import BaseSettings
-from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -13,8 +12,17 @@ class Settings(BaseSettings):
 
     UPLOADS_DIR: str = "uploads"
 
-    class Config:
-        env_file = ".env"
+    # Приглашения сотрудников. Без SMTP администратор копирует ссылку вручную.
+    INVITATION_TTL_HOURS: int = 72
+    PUBLIC_APP_URL: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_STARTTLS: bool = True
+
+    model_config = SettingsConfigDict(env_file=".env")
 
 
 settings = Settings()

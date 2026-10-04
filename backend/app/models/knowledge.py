@@ -35,6 +35,7 @@ class KnowledgeTopic(Base, TimestampMixin):
     required_knowledge_level = Column(Integer, default=1, nullable=False)  # 1–5
     related_lessons = Column(JSON, nullable=True)  # list[str]
     related_tests = Column(JSON, nullable=True)    # list[str]
+    sort_order = Column(Integer, default=0, server_default="0", nullable=False)  # position in the library
 
     company = relationship("Company", back_populates="knowledge_topics")
     position_links = relationship("PositionTopic", back_populates="topic", cascade="all, delete-orphan")

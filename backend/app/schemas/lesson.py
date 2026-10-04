@@ -49,10 +49,20 @@ class LessonResponse(BaseModel):
     duration_minutes: Optional[int]
     video_url: Optional[str]
     status: LessonStatus
+    sort_order: int = 0
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class LessonListItem(LessonResponse):
+    material_types: List[MaterialType] = []
+
+
+class LessonReorder(BaseModel):
+    topic_id: Optional[UUID] = None
+    ids: List[UUID]
 
 
 class LessonMaterialResponse(BaseModel):
