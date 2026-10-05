@@ -12,7 +12,7 @@ from app.core.security import create_access_token
 
 async def main():
     async with AsyncSessionLocal() as db:
-        users = (await db.execute(select(User).where(User.is_active.is_(True), User.company_id.is_not(None), User.role.in_(["company_admin", "hr"])).order_by(User.created_at))).scalars().all()
+        users = (await db.execute(select(User).where(User.is_active.is_(True), User.company_id.is_not(None), User.role.in_(["company_admin", "hr"])).order_by((User.role == "company_admin").desc(), User.created_at))).scalars().all()
         if not users:
             raise RuntimeError("No active company HR/admin account for smoke check")
         checked = set()
@@ -22,6 +22,8 @@ async def main():
             checked.add(user.company_id)
             token = create_access_token({"sub": str(user.id)}, timedelta(minutes=2))
             paths = ["/auth/me", "/workspace/dashboard", "/recruitment/vacancies", "/recruitment/candidates", "/recruitment/interviews", "/positions/", "/departments/", "/employees/"]
+            if user.role == "company_admin":
+                paths.append("/access/users")
             employee = (await db.execute(select(Employee.id).where(Employee.company_id == user.company_id).limit(1))).scalar_one_or_none()
             if employee:
                 paths.append(f"/workspace/employees/{employee}")
