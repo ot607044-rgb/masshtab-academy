@@ -18,7 +18,7 @@ export function EmployeeAvatar({ employee, large = false }: { employee: Pick<Emp
     }).catch(() => setSrc(""));
     return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [employee.photo_url]);
-  return <span className={`${styles.avatar} ${large ? styles.large : ""}`}>{src ? <img src={src} alt={`Фото ${employee.full_name}`} onError={() => setSrc("")} /> : <User size={large ? 36 : 18} aria-hidden="true" />}</span>;
+  return <span className={`${styles.avatar} ${large ? styles.large : ""}`}>{src ? <img src={src} alt={`Фото ${employee.full_name}`} onError={() => setSrc("")} /> : <User size={large ? 72 : 18} aria-hidden="true" />}</span>;
 }
 
 export default function EmployeePhoto({ employee, editable, onUpdated }: { employee: Employee; editable: boolean; onUpdated: (employee: Employee) => void }) {
