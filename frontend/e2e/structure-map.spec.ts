@@ -104,3 +104,22 @@ test("structure map search, branch collapse and information card use CRM data", 
   await page.getByLabel("Поиск по структуре").fill("нет такого");
   await expect(page.getByText("Ничего не найдено по запросу «нет такого».")).toBeVisible();
 });
+
+test("structure map fits many branches into the screen width without horizontal scroll", async ({ page }) => {
+  const names = ["Продажи", "Маркетинг", "Финансы", "Производство", "Логистика", "Кадры", "ИТ", "Юридический отдел"];
+  await page.route("**/api/v1/departments/", route => route.fulfill({ json: names.map((name, i) => ({ id: `m${i}`, name, description: null, head_id: null, parent_id: null, company_id: "company" })) }));
+  await page.route("**/api/v1/positions/", route => route.fulfill({ json: names.map((name, i) => ({ id: `mp${i}`, name: `Руководитель: ${name}`, department_id: `m${i}`, company_id: "company" })) }));
+  await page.goto("/dashboard/organization");
+  await expect(page.getByRole("heading", { name: "Юридический отдел", exact: true })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Информационная карточка" })).toHaveCount(0);
+  const canvas = page.getByRole("region", { name: "Оргструктура" });
+  expect(await canvas.evaluate(el => { const sc = el.querySelector("div[class*=scroller]")!; return sc.scrollWidth <= sc.clientWidth + 1; })).toBeTruthy();
+  await page.screenshot({ path: `../design-preview/implementation/structure-map-wide-${test.info().project.name}.png`, fullPage: true });
+
+  await page.getByRole("heading", { name: "Финансы", exact: true }).click();
+  const card = page.getByRole("complementary", { name: "Информационная карточка" });
+  await expect(card).toContainText("Руководитель: Финансы");
+  await page.screenshot({ path: `../design-preview/implementation/structure-map-card-${test.info().project.name}.png` });
+  await card.getByRole("button", { name: "Закрыть карточку" }).click();
+  await expect(card).toHaveCount(0);
+});

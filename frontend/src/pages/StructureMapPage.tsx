@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Building2, ChevronRight, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from "../api/departments";
 import { getPositions, createPosition } from "../api/positions";
 import { getEmployees } from "../api/employees";
@@ -14,6 +14,8 @@ import s from "./StructureMap.module.css";
 
 const TONES = ["blue", "sand", "green", "rose", "purple", "slate"] as const;
 const NO_POSITION = "__none__";
+// Branch layout: columns adapt to the available width; wrap into rows before falling back to horizontal scroll.
+const COL_MIN = 228, COL_MAX = 300, GAP = 10, SPINE = 14;
 
 type Draft = { kind: "department" | "position"; parentId: string | null };
 type Selection = { kind: "department" | "position" | "employee"; id: string } | null;
@@ -80,6 +82,8 @@ const StructureMapPage: React.FC = () => {
   const [selection, setSelection] = useState<Selection>(null);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [avail, setAvail] = useState(0);
   const newColumnRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -94,10 +98,21 @@ const StructureMapPage: React.FC = () => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
+      if (e.key === "Escape" && !(e.target as HTMLElement)?.closest?.("form, [role=dialog]")) setSelection(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const measure = () => setAvail(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading]);
 
   // ── Structure helpers (real CRM data) ────────────────────────────────────────
   const deptById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
@@ -325,8 +340,8 @@ const StructureMapPage: React.FC = () => {
   };
 
   // ── Inspector ────────────────────────────────────────────────────────────────
-  const fallback = roots[0] ? { kind: "department" as const, id: roots[0].id } : null;
-  const current = selection && (selection.kind === "department" ? deptById.has(selection.id) : selection.kind === "position" ? posById.has(selection.id) : empById.has(selection.id)) ? selection : fallback;
+  const current = selection && (selection.kind === "department" ? deptById.has(selection.id) : selection.kind === "position" ? posById.has(selection.id) : empById.has(selection.id)) ? selection : null;
+  const closeBtn = <button type="button" className={s.closeBtn} onClick={() => setSelection(null)} aria-label="Закрыть карточку" title="Закрыть (Esc)"><X size={16} aria-hidden="true" /></button>;
 
   const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div className={s.relationRow}><span>{label}</span><strong>{children}</strong></div>
@@ -336,7 +351,7 @@ const StructureMapPage: React.FC = () => {
     : <>—</>;
 
   const renderInspector = () => {
-    if (!current) return <div className={s.inspectorEmpty}>Выберите отдел, должность или сотрудника на схеме.</div>;
+    if (!current) return null;
     if (current.kind === "department") {
       const d = deptById.get(current.id)!;
       const head = d.head_id ? empById.get(d.head_id) : undefined;
@@ -345,7 +360,7 @@ const StructureMapPage: React.FC = () => {
       const deptPositions = positionsOf(d.id);
       return (
         <>
-          <div className={s.inspectorHead}><span>Карточка отдела</span></div>
+          <div className={s.inspectorHead}><span>Карточка отдела</span>{closeBtn}</div>
           <div className={s.hero}>
             <span className={`${s.avatar} ${s.avatarLarge} ${s[`tone_${toneOf(d.id)}`]}`}><Building2 size={22} aria-hidden="true" /></span>
             <div><strong className={s.heroTitle}>{d.name}</strong><p>{parent ? `Входит в «${parent.name}»` : companyName}</p></div>
@@ -379,7 +394,7 @@ const StructureMapPage: React.FC = () => {
       const head = headFor(p.department_id);
       return (
         <>
-          <div className={s.inspectorHead}><span>Карточка должности</span></div>
+          <div className={s.inspectorHead}><span>Карточка должности</span>{closeBtn}</div>
           <div className={s.hero}>
             <span className={`${s.avatar} ${s.avatarLarge} ${s[`tone_${toneOf(p.department_id)}`]}`}>{initials(p.name)}</span>
             <div><strong className={s.heroTitle}>{p.name}</strong><p>{d ? deptPath(d.id) : "Отдел не указан"}</p></div>
@@ -411,7 +426,7 @@ const StructureMapPage: React.FC = () => {
     const reports = employees.filter((x) => x.manager_id === e.id).length;
     return (
       <>
-        <div className={s.inspectorHead}><span>Карточка сотрудника</span></div>
+        <div className={s.inspectorHead}><span>Карточка сотрудника</span>{closeBtn}</div>
         <div className={s.hero}>
           <span className={`${s.avatar} ${s.avatarLarge} ${s[`tone_${toneOf(e.department_id)}`]}`}>{initials(e.full_name)}</span>
           <div><strong className={s.heroTitle}>{titleOf(e)}</strong><p>{e.full_name}</p></div>
@@ -446,78 +461,88 @@ const StructureMapPage: React.FC = () => {
   ] : [];
   const visibleRoots = roots.filter((r) => deptVisible(r.id));
 
+  const items: React.ReactNode[] = visibleRoots.map(renderBranch);
+  if (canEdit && !matches) items.push(
+    <div key="__new" className={`${s.leaderBranch} ${s.newBranch}`} ref={newColumnRef}>
+      {isDraft("department", null) ? (
+        <InlineForm label="Новый отдел" placeholder="Название отдела" onSubmit={(n) => addDepartment(n, null)} onCancel={() => setDraft(null)} />
+      ) : (
+        <button type="button" className={s.newDept} onClick={() => setDraft({ kind: "department", parentId: null })}>
+          <span className={s.plus}><Plus size={16} aria-hidden="true" /></span>
+          Новый отдел
+        </button>
+      )}
+    </div>,
+  );
+  const width = avail || 1200;
+  const fit = (w: number) => Math.max(1, Math.floor((w + GAP) / (COL_MIN + GAP)));
+  const stack = fit(width) === 1;
+  const multi = !stack && items.length > fit(width);
+  const perRow = stack ? 1 : multi ? fit(width - SPINE) : Math.max(1, items.length);
+  const col = stack ? Math.min(340, width) : Math.min(COL_MAX, Math.floor((width - (multi ? SPINE : 0) - GAP * (perRow - 1)) / perRow));
+  const rows: React.ReactNode[][] = [];
+  for (let i = 0; i < items.length; i += perRow) rows.push(items.slice(i, i + perRow));
+  const layout = stack ? s.stack : multi ? s.multi : s.single;
+  const inspector = renderInspector();
+
   return (
     <div className={`${page.page} ${s.module}`}>
       <header className={s.pageHeader}>
-        <div>
+        <div className={s.headTitle}>
           <p className={s.eyebrow}>Команда</p>
           <h1 className={s.title}>Структура компании</h1>
           <p className={s.subtitle}>Карта подчинения и зон ответственности · {units(departments.length)} · {roles(positions.length)} · {people(employees.length)}</p>
         </div>
-        {canEdit && (
-          <button type="button" className={`${s.button} ${s.primary}`} onClick={startNewDepartment}>
-            <Plus size={16} aria-hidden="true" /> Добавить отдел
-          </button>
+        {!loading && (
+          <div className={s.headActions}>
+            <label className={s.search}>
+              <Search size={17} aria-hidden="true" />
+              <input ref={searchRef} type="search" aria-label="Поиск по структуре" placeholder="Найти отдел, должность или сотрудника" value={query} onChange={(e) => { setQuery(e.target.value); setSelection(null); }} />
+              <span className={s.shortcut}>Ctrl K</span>
+            </label>
+            <button type="button" className={s.button} disabled={!!matches} onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(departments.map((d) => d.id)))}>
+              {allCollapsed ? "Раскрыть ветки" : "Свернуть ветки"}
+            </button>
+            {canEdit && (
+              <button type="button" className={`${s.button} ${s.primary}`} onClick={startNewDepartment}>
+                <Plus size={16} aria-hidden="true" /> Добавить отдел
+              </button>
+            )}
+          </div>
         )}
       </header>
 
       {loading ? (
         <div className={page.loading}>Загрузка...</div>
       ) : (
-        <>
-          <div className={s.toolbar}>
-            <label className={s.search}>
-              <Search size={17} aria-hidden="true" />
-              <input ref={searchRef} type="search" aria-label="Поиск по структуре" placeholder="Найти отдел, должность или сотрудника" value={query} onChange={(e) => setQuery(e.target.value)} />
-              <span className={s.shortcut}>Ctrl K</span>
-            </label>
+        <div className={`${s.workspace} ${inspector ? s.withInspector : ""}`}>
+          <section className={s.canvas} aria-label="Оргструктура">
             <span className={s.structureKey}><i /> линия прямого подчинения</span>
-            <button type="button" className={s.button} disabled={!!matches} onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(departments.map((d) => d.id)))}>
-              {allCollapsed ? "Раскрыть ветки" : "Свернуть ветки"}
-            </button>
-          </div>
-
-          <div className={s.workspace}>
-            <section className={s.canvas} aria-label="Оргструктура">
-              <div className={s.canvasHead}>
-                <div><strong>{companyName}</strong><span>{people(employees.length)} · {units(departments.length)}</span></div>
-              </div>
-
-              <div className={s.scroller}>
-                <div className={s.orgTree}>
-                  <div className={s.rootNode}>
-                    <span className={s.levelLabel}>Компания</span>
-                    <div className={s.companyNode}>
-                      <span className={s.companySymbol}><Building2 size={18} aria-hidden="true" /></span>
-                      <span><small>Компания</small><strong>{companyName}</strong></span>
-                      <em>{units(roots.length)} верхнего уровня</em>
-                    </div>
+            <div className={s.scroller} ref={scrollerRef}>
+              <div className={s.orgTree}>
+                <div className={s.rootNode}>
+                  <div className={s.companyNode}>
+                    <span className={s.companySymbol}><Building2 size={18} aria-hidden="true" /></span>
+                    <span><small>Компания</small><strong>{companyName}</strong></span>
+                    <em>{units(roots.length)} верхнего уровня · {people(employees.length)}</em>
                   </div>
-
-                  <div className={s.leadersGrid}>
-                    {visibleRoots.map(renderBranch)}
-                    {canEdit && !matches && (
-                      <div className={`${s.leaderBranch} ${s.newBranch}`} ref={newColumnRef}>
-                        {isDraft("department", null) ? (
-                          <InlineForm label="Новый отдел" placeholder="Название отдела" onSubmit={(n) => addDepartment(n, null)} onCancel={() => setDraft(null)} />
-                        ) : (
-                          <button type="button" className={s.newDept} onClick={() => setDraft({ kind: "department", parentId: null })}>
-                            <span className={s.plus}><Plus size={16} aria-hidden="true" /></span>
-                            Новый отдел
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {roots.length === 0 && !canEdit && <div className={s.empty}>Отделов пока нет.</div>}
-                  {matches && visibleRoots.length === 0 && <div className={s.empty}>Ничего не найдено по запросу «{query.trim()}».</div>}
                 </div>
-              </div>
-            </section>
 
-            <aside className={s.inspector} aria-label="Информационная карточка">{renderInspector()}</aside>
-          </div>
-        </>
+                {items.length > 0 && (
+                  <div className={`${s.rows} ${layout}`} style={{ "--col": `${col}px` } as React.CSSProperties}>
+                    {rows.map((row, i) => (
+                      <div key={i} className={s.leadersRow} style={{ gridTemplateColumns: `repeat(${row.length}, var(--col))` }}>{row}</div>
+                    ))}
+                  </div>
+                )}
+                {roots.length === 0 && !canEdit && <div className={s.empty}>Отделов пока нет.</div>}
+                {matches && visibleRoots.length === 0 && <div className={s.empty}>Ничего не найдено по запросу «{query.trim()}».</div>}
+              </div>
+            </div>
+          </section>
+
+          {inspector && <aside className={s.inspector} aria-label="Информационная карточка">{inspector}</aside>}
+        </div>
       )}
 
       {editing && (
