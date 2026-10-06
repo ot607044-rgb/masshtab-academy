@@ -178,7 +178,7 @@ export default function CalendarPage() {
         <div className="academy-metrics academy-calendar-metrics">
           {metric("Загрузка дня", `${summary?.day_load_percent ?? 0}%`, "Рабочее окно 09:00-18:00")}
           {metric("Загрузка недели", `${summary?.week_load_percent ?? 0}%`, "По встречам системы")}
-          {metric("Свободных окон", String(summary?.free_slots.length ?? 0), "Для выбранного дня")}
+          {metric("Свободных окон", String(summary?.free_slots?.length ?? 0), "Для выбранного дня")}
           {metric("Лучший слот", slotLabel(summary?.best_slot ?? null), "Самый длинный интервал")}
         </div>
         <section className="academy-section academy-calendar-board">
@@ -196,8 +196,8 @@ export default function CalendarPage() {
         <section className="academy-section">
           <div className="academy-section-heading"><h2>Свободное время</h2><Clock size={18} /></div>
           <div className="academy-free-slots">
-            {summary?.free_slots.map(slot => <button key={`${slot.starts_at}-${slot.ends_at}`} onClick={() => { setDate(new Date(slot.starts_at)); setForm("new"); }}><CheckCircle2 size={16} /><span>{slotLabel(slot)}</span><small>{slot.duration_minutes} мин</small></button>)}
-            {!summary?.free_slots.length && <Empty>Свободных окон нет</Empty>}
+            {summary?.free_slots?.map(slot => <button key={`${slot.starts_at}-${slot.ends_at}`} onClick={() => { setDate(new Date(slot.starts_at)); setForm("new"); }}><CheckCircle2 size={16} /><span>{slotLabel(slot)}</span><small>{slot.duration_minutes} мин</small></button>)}
+            {!summary?.free_slots?.length && <Empty>Свободных окон нет</Empty>}
           </div>
         </section>
         <section className="academy-section">
