@@ -154,3 +154,34 @@ test("drag and drop moves a position with its staff and reassigns an employee", 
   await person.dragTo(page.getByRole("list", { name: "Должности: Кадровый отдел" }).getByText("Главный бухгалтер", { exact: true }));
   expect(patches).toEqual([{ path: "/api/v1/employees/e1", body: { position_id: "p1", department_id: "d3" } }]);
 });
+
+test("company leadership level: add director, see subordinates, change heads in report", async ({ page }) => {
+  const patches: { path: string; body: Record<string, unknown> }[] = [];
+  await page.route(/\/api\/v1\/(employees|departments)\/[a-z0-9]+$/, async route => {
+    const path = new URL(route.request().url()).pathname;
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    patches.push({ path, body });
+    const id = path.split("/").pop();
+    const base = path.includes("employees")
+      ? { id, full_name: "Ольга Юнусова", company_id: "company", department_id: "d1", position_id: null }
+      : { id, name: "Кадровый отдел", description: null, head_id: null, parent_id: null, company_id: "company" };
+    await route.fulfill({ json: { ...base, ...body } });
+  });
+  await page.goto("/dashboard/organization");
+  await page.getByRole("button", { name: "Добавить должность руководства" }).click();
+  await page.getByLabel("Должность руководства").fill("Генеральный директор");
+  await page.getByLabel("Сотрудник на должности").selectOption({ label: "Ольга Юнусова" });
+  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Генеральный директор", exact: true })).toBeVisible();
+  expect(patches).toEqual([{ path: "/api/v1/employees/e1", body: { position_id: "p2", department_id: null } }]);
+  await expect(page.getByRole("button", { name: /Ольга Юнусова\s*в подчинении 1 чел\. · прямых 1/ })).toBeVisible();
+  await page.screenshot({ path: `../design-preview/implementation/structure-map-leadership-${test.info().project.name}.png` });
+
+  await page.getByRole("button", { name: "Подчинённость" }).click();
+  const report = page.getByRole("dialog", { name: "Отчёт по подчинению" });
+  await expect(report.getByRole("row", { name: /Ольга Юнусова.*Генеральный директор/ })).toContainText("1");
+  await report.getByLabel("Руководитель отдела Кадровый отдел").selectOption({ label: "Римма Адилова" });
+  await expect.poll(() => patches.at(-1)).toEqual({ path: "/api/v1/departments/d3", body: { head_id: "e2" } });
+  await report.getByRole("button", { name: "Закрыть отчёт" }).click();
+  await expect(report).toHaveCount(0);
+});

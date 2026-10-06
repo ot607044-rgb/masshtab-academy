@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, ChevronRight, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Building2, ChevronRight, Download, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
 import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from "../api/departments";
 import { getPositions, createPosition, updatePosition } from "../api/positions";
 import { getEmployees, updateEmployee } from "../api/employees";
@@ -20,8 +20,9 @@ const COL_MIN = 228, COL_MAX = 300, GAP = 10, SPINE = 14;
 type Draft = { kind: "department" | "position"; parentId: string | null };
 type Selection = { kind: "department" | "position" | "employee"; id: string } | null;
 type Drag = { kind: "position" | "employee"; id: string };
-type DropTarget = { kind: "department" | "position"; id: string };
+type DropTarget = { kind: "department" | "position" | "company"; id: string };
 type DragAttrs = Pick<React.HTMLAttributes<HTMLElement>, "draggable" | "onDragStart" | "onDragEnd">;
+const COMPANY_TARGET: DropTarget = { kind: "company", id: "company" };
 
 const apiError = (err: unknown, fallback: string) => {
   const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -60,13 +61,42 @@ const InlineForm: React.FC<{ label: string; placeholder: string; onSubmit: (name
   );
 };
 
-const PersonNode: React.FC<{ title: string; name: string; tone: string; selected: boolean; compact?: boolean; onSelect: () => void; drag?: DragAttrs }> = ({ title, name, tone, selected, compact, onSelect, drag }) => (
+const PersonNode: React.FC<{ title: string; name: string; tone: string; selected: boolean; compact?: boolean; onSelect: () => void; drag?: DragAttrs; avatarOf?: string }> = ({ title, name, tone, selected, compact, onSelect, drag, avatarOf }) => (
   <button type="button" className={`${s.personNode} ${compact ? s.compact : ""} ${selected ? s.selected : ""} ${drag?.draggable ? s.draggable : ""}`} onClick={onSelect} aria-pressed={selected} {...drag}>
-    <span className={`${s.avatar} ${s[`tone_${tone}`]}`}>{initials(name)}</span>
+    <span className={`${s.avatar} ${s[`tone_${tone}`]}`}>{initials(avatarOf ?? name)}</span>
     <span className={s.personCopy}><strong>{title}</strong><small>{name}</small></span>
     {!compact && <ChevronRight size={15} aria-hidden="true" />}
   </button>
 );
+
+const LeaderForm: React.FC<{ employees: Employee[]; onSubmit: (name: string, employeeId: string) => Promise<void>; onCancel: () => void }> = ({ employees, onSubmit, onCancel }) => {
+  const [name, setName] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) { setError("Введите название должности"); return; }
+    setSaving(true);
+    try { await onSubmit(name.trim(), employeeId); } catch (err) { setError(apiError(err, "Не удалось сохранить")); setSaving(false); }
+  };
+  return (
+    <form className={`${s.inlineForm} ${s.leaderForm}`} onSubmit={submit} onKeyDown={(e) => e.key === "Escape" && onCancel()}>
+      <input aria-label="Должность руководства" placeholder="Например: Генеральный директор" value={name} maxLength={255} autoFocus disabled={saving}
+        onChange={(e) => { setName(e.target.value); setError(""); }} />
+      <select aria-label="Сотрудник на должности" value={employeeId} disabled={saving} onChange={(e) => setEmployeeId(e.target.value)}>
+        <option value="">— вакансия —</option>
+        {employees.filter((x) => x.status !== "fired").sort((a, b) => a.full_name.localeCompare(b.full_name, "ru")).map((x) => <option key={x.id} value={x.id}>{x.full_name}</option>)}
+      </select>
+      {employeeId && <p className={s.formHint}>Сотрудник перейдёт на уровень руководства компании (вне отделов). Руководство отделами сохранится.</p>}
+      {error && <p className={s.formError}>{error}</p>}
+      <div className={s.formActions}>
+        <button type="button" className={s.button} onClick={onCancel} disabled={saving}>Отмена</button>
+        <button type="submit" className={`${s.button} ${s.primary}`} disabled={saving}>Создать</button>
+      </div>
+    </form>
+  );
+};
 
 const StructureMapPage: React.FC = () => {
   const { user } = useAuth();
@@ -88,6 +118,8 @@ const StructureMapPage: React.FC = () => {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(0);
   const newColumnRef = useRef<HTMLDivElement>(null);
+  const [leaderDraft, setLeaderDraft] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [busyMove, setBusyMove] = useState(false);
   const [over, setOver] = useState<string | null>(null);
@@ -154,6 +186,47 @@ const StructureMapPage: React.FC = () => {
     }
     return undefined;
   };
+  // ── Company leadership (positions without a department) & subordination ────
+  const topPositions = positions.filter((p) => !p.department_id || !deptById.has(p.department_id)).sort(byName);
+  const topIds = new Set(topPositions.map((p) => p.id));
+  const isTop = (e?: Employee) => !!e?.position_id && topIds.has(e.position_id);
+  const topLeader = (exclude?: string) => topPositions.flatMap((p) => holders(p.id)).find((e) => e.id !== exclude && e.status !== "fired");
+  /** Direct reports: members of departments the person heads (sub-departments without their own head included),
+   *  heads of their sub-departments, explicit manager links; company leaders also lead top-level departments. */
+  const directOf = (id: string): Set<string> => {
+    const out = new Set<string>();
+    const add = (e?: Employee) => { if (e && e.id !== id) out.add(e.id); };
+    const seen = new Set<string>();
+    const absorb = (d: Department) => {
+      if (seen.has(d.id)) return;
+      seen.add(d.id);
+      employees.forEach((e) => { if (e.department_id === d.id) add(e); });
+      childrenOf(d.id).forEach((c) => { const h = c.head_id ? empById.get(c.head_id) : undefined; if (h && h.id !== id) add(h); else absorb(c); });
+    };
+    departments.filter((d) => d.head_id === id).forEach(absorb);
+    if (isTop(empById.get(id))) roots.forEach((r) => { const h = r.head_id ? empById.get(r.head_id) : undefined; if (h && h.id !== id) add(h); else absorb(r); });
+    employees.forEach((e) => { if (e.manager_id === id) add(e); });
+    return out;
+  };
+  const statsCache = new Map<string, { direct: number; total: number }>();
+  const statsOf = (id: string) => {
+    const cached = statsCache.get(id);
+    if (cached) return cached;
+    const active = (x: string) => empById.get(x)?.status !== "fired";
+    const direct = directOf(id);
+    const all = new Set<string>();
+    const stack = [...direct];
+    while (stack.length) {
+      const x = stack.pop()!;
+      if (x === id || all.has(x)) continue;
+      all.add(x);
+      directOf(x).forEach((y) => stack.push(y));
+    }
+    const res = { direct: [...direct].filter(active).length, total: [...all].filter(active).length };
+    statsCache.set(id, res);
+    return res;
+  };
+
   const toneOf = useMemo(() => {
     const map = new Map<string, string>();
     const top = (id: string) => { let d = deptById.get(id); for (let i = 0; d?.parent_id && deptById.has(d.parent_id) && i < 20; i++) d = deptById.get(d.parent_id); return d?.id; };
@@ -199,6 +272,25 @@ const StructureMapPage: React.FC = () => {
     setPositions((prev) => [...prev, saved]);
     setDraft(null);
   };
+  const addLeaderPosition = async (name: string, employeeId: string) => {
+    const saved: Position = await createPosition({ name, department_id: null });
+    setPositions((prev) => [...prev, saved]);
+    if (employeeId) {
+      const emp: Employee = await updateEmployee(employeeId, { position_id: saved.id, department_id: null });
+      setEmployees((prev) => prev.map((e) => (e.id === emp.id ? emp : e)));
+    }
+    setLeaderDraft(false);
+    setSelection({ kind: "position", id: saved.id });
+  };
+  const changeHead = async (dept: Department, headId: string) => {
+    try {
+      const saved: Department = await updateDepartment(dept.id, { head_id: headId || null });
+      setDepartments((prev) => prev.map((d) => (d.id === saved.id ? saved : d)));
+      setNotice({ text: `Руководитель отдела «${dept.name}» обновлён` });
+    } catch (err) {
+      setNotice({ text: apiError(err, "Не удалось сменить руководителя"), error: true });
+    }
+  };
   const remove = async (dept: Department) => {
     if (!confirm(`Удалить отдел «${dept.name}»? Его подотделы перейдут на уровень выше.`)) return;
     await deleteDepartment(dept.id);
@@ -223,9 +315,12 @@ const StructureMapPage: React.FC = () => {
   // ── Drag & drop: positions → departments, employees → positions / departments ──
   const canDrop = (d: Drag | null, target: DropTarget) => {
     if (!d || !canEdit) return false;
-    if (d.kind === "position") return target.kind === "department" && posById.get(d.id)?.department_id !== target.id;
+    if (d.kind === "position") {
+      if (target.kind === "company") return !topIds.has(d.id);
+      return target.kind === "department" && posById.get(d.id)?.department_id !== target.id;
+    }
     const emp = empById.get(d.id);
-    if (!emp) return false;
+    if (!emp || target.kind === "company") return false;
     return target.kind === "position" ? emp.position_id !== target.id : emp.department_id !== target.id;
   };
   const dragAttrs = (kind: Drag["kind"], id: string): DragAttrs => (canEdit && !busyMove ? {
@@ -244,7 +339,7 @@ const StructureMapPage: React.FC = () => {
       onDragOver: (e: React.DragEvent) => {
         if (!drag) return;
         // An invalid position target lets the enclosing department take the drop.
-        if (!canDrop(drag, target)) { if (target.kind === "department") { e.stopPropagation(); if (over === key) setOver(null); } return; }
+        if (!canDrop(drag, target)) { if (target.kind !== "position") { e.stopPropagation(); if (over === key) setOver(null); } return; }
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = "move";
@@ -267,6 +362,19 @@ const StructureMapPage: React.FC = () => {
   const dropClass = (target: DropTarget) => (over === `${target.kind}:${target.id}` ? s.dropOver : "");
   const move = async (d: Drag, target: DropTarget) => {
     try {
+      if (d.kind === "position" && target.kind === "company") {
+        const pos = posById.get(d.id)!;
+        const staff = holders(pos.id).filter((e) => e.department_id);
+        if (!confirm(`Перенести должность «${pos.name}» на уровень руководства компании?${staff.length ? `\nСотрудники на должности (${staff.length}) выйдут из отделов, руководство отделами сохранится.` : ""}`)) return;
+        setBusyMove(true);
+        const saved: Position = await updatePosition(pos.id, { department_id: null });
+        setPositions((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+        const moved: Employee[] = await Promise.all(staff.map((e) => updateEmployee(e.id, { department_id: null })));
+        const byId = new Map(moved.map((e) => [e.id, e]));
+        setEmployees((prev) => prev.map((e) => byId.get(e.id) ?? e));
+        setNotice({ text: `«${pos.name}» — теперь руководство компании` });
+        return;
+      }
       if (d.kind === "position") {
         const pos = posById.get(d.id)!;
         const dept = deptById.get(target.id)!;
@@ -501,12 +609,12 @@ const StructureMapPage: React.FC = () => {
           <div className={s.inspectorHead}><span>Карточка должности</span>{closeBtn}</div>
           <div className={s.hero}>
             <span className={`${s.avatar} ${s.avatarLarge} ${s[`tone_${toneOf(p.department_id)}`]}`}>{initials(p.name)}</span>
-            <div><strong className={s.heroTitle}>{p.name}</strong><p>{d ? deptPath(d.id) : "Отдел не указан"}</p></div>
+            <div><strong className={s.heroTitle}>{p.name}</strong><p>{d ? deptPath(d.id) : "Руководство компании"}</p></div>
           </div>
           <div className={s.section}>
             <span className={s.detailLabel}>Место в структуре</span>
-            <Row label="Подразделение">{d ? <button type="button" className={s.linkBtn} onClick={() => setSelection({ kind: "department", id: d.id })}>{d.name}</button> : "—"}</Row>
-            <Row label="Руководитель"><PersonLink e={head} /></Row>
+            <Row label="Подразделение">{d ? <button type="button" className={s.linkBtn} onClick={() => setSelection({ kind: "department", id: d.id })}>{d.name}</button> : "Руководство компании"}</Row>
+            <Row label="Руководитель"><PersonLink e={d ? head ?? topLeader() : undefined} /></Row>
             <Row label="Занято">{staff.length ? people(staff.length) : "Вакансия"}</Row>
           </div>
           {(p.required_skills?.length ?? 0) > 0 && (
@@ -525,9 +633,9 @@ const StructureMapPage: React.FC = () => {
     const e = empById.get(current.id)!;
     const pos = e.position_id ? posById.get(e.position_id) : undefined;
     const d = e.department_id ? deptById.get(e.department_id) : undefined;
-    const manager = (e.manager_id ? empById.get(e.manager_id) : undefined) ?? headFor(e.department_id, e.id);
+    const manager = (e.manager_id ? empById.get(e.manager_id) : undefined) ?? headFor(e.department_id, e.id) ?? (isTop(e) ? undefined : topLeader(e.id));
+    const stats = statsOf(e.id);
     const headed = departments.filter((x) => x.head_id === e.id);
-    const reports = employees.filter((x) => x.manager_id === e.id).length;
     return (
       <>
         <div className={s.inspectorHead}><span>Карточка сотрудника</span>{closeBtn}</div>
@@ -539,8 +647,10 @@ const StructureMapPage: React.FC = () => {
         <div className={s.section}>
           <span className={s.detailLabel}>Место в структуре</span>
           <Row label="Руководитель"><PersonLink e={manager} /></Row>
-          <Row label="Подчинённые">{headed.length ? `Руководит: ${headed.map((x) => x.name).join(", ")}` : reports ? people(reports) : "Нет прямых подчинённых"}</Row>
-          <Row label="Подразделение">{d ? deptPath(d.id) : "—"}</Row>
+          {headed.length > 0 && <Row label="Руководит">{headed.map((x) => x.name).join(", ")}</Row>}
+          <Row label="Прямые подчинённые">{stats.direct ? people(stats.direct) : "Нет"}</Row>
+          <Row label="Всего в подчинении">{stats.total ? people(stats.total) : "Нет"}</Row>
+          <Row label="Подразделение">{d ? deptPath(d.id) : isTop(e) ? "Руководство компании" : "—"}</Row>
           {e.status && <Row label="Статус">{EMPLOYEE_STATUS_LABELS[e.status] ?? e.status}</Row>}
         </div>
         {(pos?.required_skills?.length ?? 0) > 0 && (
@@ -564,6 +674,54 @@ const StructureMapPage: React.FC = () => {
     ...departments.filter((d) => d.id !== editing.id && !descendants(editing.id).includes(d.id)).sort(byName).map((d) => ({ value: d.id, label: d.name })),
   ] : [];
   const visibleRoots = roots.filter((r) => deptVisible(r.id));
+
+  const renderLeader = (p: Position) => {
+    const staff = holders(p.id);
+    const target: DropTarget = { kind: "position", id: p.id };
+    return (
+      <div key={p.id} className={`${s.topCard} ${dropClass(target)} ${isSel("position", p.id) ? s.cardSelected : ""} ${hit(p.name) ? s.hit : ""}`} {...dropAttrs(target)}>
+        <div className={`${s.topTitle} ${canEdit ? s.draggable : ""} ${drag?.kind === "position" && drag.id === p.id ? s.dragging : ""}`} {...dragAttrs("position", p.id)} title={canEdit ? "Перетащите в отдел, чтобы перенести" : undefined}>
+          <button type="button" className={s.titleBtn} onClick={() => setSelection({ kind: "position", id: p.id })}>
+            <span>Руководство</span>
+            <h3 className={s.deptName}>{p.name}</h3>
+          </button>
+        </div>
+        {staff.length ? staff.map((e) => {
+          const st = statsOf(e.id);
+          return (
+            <PersonNode key={e.id} title={e.full_name} name={st.total ? `в подчинении ${st.total} чел. · прямых ${st.direct}` : "нет подчинённых"} avatarOf={e.full_name}
+              tone="purple" selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} drag={dragAttrs("employee", e.id)} />
+          );
+        }) : <div className={s.noHead}>Вакансия{canEdit ? " — перетащите сюда сотрудника" : ""}</div>}
+      </div>
+    );
+  };
+  const visibleTop = topPositions.filter((p) => !matches || matches.roleIds.has(p.id));
+  const showTop = canEdit ? !matches || visibleTop.length > 0 : visibleTop.length > 0;
+
+  const leaderRows = [...new Set([
+    ...topPositions.flatMap((p) => holders(p.id).map((e) => e.id)),
+    ...departments.map((d) => d.head_id).filter((x): x is string => !!x && empById.has(x)),
+    ...employees.map((e) => e.manager_id).filter((x): x is string => !!x && empById.has(x)),
+  ])].map((id) => {
+    const e = empById.get(id)!;
+    return { e, title: titleOf(e), headed: departments.filter((d) => d.head_id === id).map((d) => d.name), ...statsOf(id) };
+  }).sort((a, b) => b.total - a.total || a.e.full_name.localeCompare(b.e.full_name, "ru"));
+  const deptRows: { d: Department; depth: number }[] = [];
+  const walk = (id: string | null, depth: number) => childrenOf(id).forEach((d) => { deptRows.push({ d, depth }); walk(d.id, depth + 1); });
+  walk(null, 0);
+  const exportCsv = () => {
+    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const lines = [["Руководитель", "Должность", "Руководит отделами", "Прямые подчинённые", "Всего в подчинении"],
+      ...leaderRows.map((r) => [r.e.full_name, r.title, r.headed.join(", "), r.direct, r.total])];
+    const blob = new Blob(["\ufeff" + lines.map((l) => l.map(esc).join(";")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `podchinenie-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const items: React.ReactNode[] = visibleRoots.map(renderBranch);
   if (canEdit && !matches) items.push(
@@ -604,6 +762,9 @@ const StructureMapPage: React.FC = () => {
               <input ref={searchRef} type="search" aria-label="Поиск по структуре" placeholder="Найти отдел, должность или сотрудника" value={query} onChange={(e) => { setQuery(e.target.value); setSelection(null); }} />
               <span className={s.shortcut}>Ctrl K</span>
             </label>
+            <button type="button" className={s.button} onClick={() => setReportOpen(true)}>
+              <Users size={16} aria-hidden="true" /> Подчинённость
+            </button>
             <button type="button" className={s.button} disabled={!!matches} onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(departments.map((d) => d.id)))}>
               {allCollapsed ? "Раскрыть ветки" : "Свернуть ветки"}
             </button>
@@ -632,6 +793,23 @@ const StructureMapPage: React.FC = () => {
                   </div>
                 </div>
 
+                {showTop && (
+                  <div className={`${s.topLevel} ${dropClass(COMPANY_TARGET)}`} {...dropAttrs(COMPANY_TARGET)}>
+                    <span className={s.levelLabel}>Руководство компании</span>
+                    <div className={s.topCards}>
+                      {visibleTop.map(renderLeader)}
+                      {canEdit && !matches && (leaderDraft ? (
+                        <LeaderForm employees={employees} onSubmit={addLeaderPosition} onCancel={() => setLeaderDraft(false)} />
+                      ) : (
+                        <button type="button" className={s.addLeader} onClick={() => setLeaderDraft(true)} aria-label="Добавить должность руководства" title="Добавить должность руководства (директор, собственник)">
+                          <span className={s.plus}><Plus size={16} aria-hidden="true" /></span>
+                          {topPositions.length === 0 && <span>Директор / собственник</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {items.length > 0 && (
                   <div className={`${s.rows} ${layout}`} style={{ "--col": `${col}px` } as React.CSSProperties}>
                     {rows.map((row, i) => (
@@ -646,6 +824,59 @@ const StructureMapPage: React.FC = () => {
           </section>
 
           {inspector && <aside className={s.inspector} aria-label="Информационная карточка">{inspector}</aside>}
+        </div>
+      )}
+
+      {reportOpen && (
+        <div className={s.backdrop} onClick={(e) => e.target === e.currentTarget && setReportOpen(false)}>
+          <div className={s.report} role="dialog" aria-modal="true" aria-label="Отчёт по подчинению" onKeyDown={(e) => e.key === "Escape" && setReportOpen(false)}>
+            <div className={s.reportHead}>
+              <div>
+                <strong className={s.heroTitle}>Отчёт по подчинению</strong>
+                <p className={s.muted}>Без учёта уволенных. Руководитель отдела отвечает за отдел и подотделы без своего руководителя; руководство компании — за отделы верхнего уровня.</p>
+              </div>
+              <button type="button" className={s.button} onClick={exportCsv}><Download size={15} aria-hidden="true" /> CSV</button>
+              <button type="button" className={s.closeBtn} onClick={() => setReportOpen(false)} aria-label="Закрыть отчёт" autoFocus><X size={16} aria-hidden="true" /></button>
+            </div>
+            <span className={s.detailLabel}>Руководители</span>
+            <div className={s.tableWrap}>
+              <table className={s.table}>
+                <thead><tr><th>Руководитель</th><th>Должность</th><th>Руководит</th><th>Прямые</th><th>Всего в подчинении</th></tr></thead>
+                <tbody>
+                  {leaderRows.map((r) => (
+                    <tr key={r.e.id}>
+                      <td><button type="button" className={s.linkBtn} onClick={() => { setSelection({ kind: "employee", id: r.e.id }); setReportOpen(false); }}>{r.e.full_name}</button></td>
+                      <td>{r.title}</td>
+                      <td>{r.headed.join(", ") || "—"}</td>
+                      <td className={s.num}>{r.direct}</td>
+                      <td className={s.num}><b>{r.total}</b></td>
+                    </tr>
+                  ))}
+                  {leaderRows.length === 0 && <tr><td colSpan={5} className={s.muted}>Руководители ещё не назначены</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <span className={s.detailLabel}>Руководители отделов</span>
+            <div className={s.tableWrap}>
+              <table className={s.table}>
+                <thead><tr><th>Отдел</th><th>Руководитель</th><th>Сотрудников</th></tr></thead>
+                <tbody>
+                  {deptRows.map(({ d, depth }) => (
+                    <tr key={d.id}>
+                      <td style={{ paddingLeft: 10 + depth * 16 }}>{d.name}</td>
+                      <td>{canEdit ? (
+                        <select aria-label={`Руководитель отдела ${d.name}`} value={d.head_id ?? ""} onChange={(e) => changeHead(d, e.target.value)}>
+                          <option value="">— не назначен —</option>
+                          {employees.filter((x) => x.status !== "fired" || x.id === d.head_id).sort((a, b) => a.full_name.localeCompare(b.full_name, "ru")).map((x) => <option key={x.id} value={x.id}>{x.full_name}</option>)}
+                        </select>
+                      ) : (d.head_id ? empById.get(d.head_id)?.full_name ?? "—" : "—")}</td>
+                      <td className={s.num}>{peopleIn(d.id)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
