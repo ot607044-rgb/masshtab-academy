@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Building2, ChevronRight, Download, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
 import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from "../api/departments";
-import { getPositions, createPosition, updatePosition } from "../api/positions";
+import { getPositions, createPosition, updatePosition, deletePosition } from "../api/positions";
 import { getEmployees, updateEmployee } from "../api/employees";
 import { getCompany } from "../api/companies";
 import type { Department, Employee, Position } from "../types";
@@ -119,6 +119,7 @@ const StructureMapPage: React.FC = () => {
   const [avail, setAvail] = useState(0);
   const newColumnRef = useRef<HTMLDivElement>(null);
   const [leaderDraft, setLeaderDraft] = useState(false);
+  const [removingTop, setRemovingTop] = useState<{ pos: Position; deptId: string; busy: boolean; error: string } | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [busyMove, setBusyMove] = useState(false);
@@ -201,6 +202,7 @@ const StructureMapPage: React.FC = () => {
   const topPositions = positions.filter((p) => !p.department_id || !deptById.has(p.department_id)).sort(byName);
   const topIds = new Set(topPositions.map((p) => p.id));
   const isTop = (e?: Employee) => !!e?.position_id && topIds.has(e.position_id);
+  const topHolderCount = new Set(topPositions.flatMap((p) => holders(p.id).filter((e) => e.status !== "fired").map((e) => e.id))).size;
   const topLeader = (exclude?: string) => topPositions.flatMap((p) => holders(p.id)).find((e) => e.id !== exclude && e.status !== "fired");
   /** Direct reports: members of departments the person heads (sub-departments without their own head included),
    *  heads of their sub-departments, explicit manager links; company leaders also lead top-level departments. */
@@ -215,7 +217,8 @@ const StructureMapPage: React.FC = () => {
       childrenOf(d.id).forEach((c) => { const h = c.head_id ? empById.get(c.head_id) : undefined; if (h && h.id !== id) add(h); else absorb(c); });
     };
     departments.filter((d) => d.head_id === id).forEach(absorb);
-    if (isTop(empById.get(id))) roots.forEach((r) => { const h = r.head_id ? empById.get(r.head_id) : undefined; if (h && h.id !== id) add(h); else absorb(r); });
+    // Implicit control over top-level departments only when the company has a single leader.
+    if (isTop(empById.get(id)) && topHolderCount === 1) roots.forEach((r) => { const h = r.head_id ? empById.get(r.head_id) : undefined; if (h && h.id !== id) add(h); else absorb(r); });
     employees.forEach((e) => { if (e.manager_id === id) add(e); });
     return out;
   };
@@ -293,6 +296,42 @@ const StructureMapPage: React.FC = () => {
     }
     setLeaderDraft(false);
     setSelection({ kind: "position", id: saved.id });
+  };
+  const openRemoveTop = (pos: Position) => {
+    const holder = holders(pos.id)[0];
+    const headed = holder ? departments.find((d) => d.head_id === holder.id && !d.parent_id) ?? departments.find((d) => d.head_id === holder.id) : undefined;
+    setRemovingTop({ pos, deptId: headed?.id ?? roots[0]?.id ?? "", busy: false, error: "" });
+  };
+  /** Takes a position off the company leadership level: back into a department, or deleted outright. */
+  const removeTop = async (mode: "move" | "delete") => {
+    if (!removingTop) return;
+    const { pos, deptId } = removingTop;
+    const dept = deptById.get(deptId);
+    const staff = holders(pos.id);
+    if (mode === "move" && !dept) { setRemovingTop({ ...removingTop, error: "Выберите отдел" }); return; }
+    if (mode === "delete" && !confirm(`Удалить должность «${pos.name}» безвозвратно?\nПривязанные к ней материалы базы знаний будут удалены, уроки и тесты отвяжутся.${staff.length ? `\nСотрудники (${staff.length}) останутся без должности${dept ? ` в отделе «${dept.name}»` : ""}.` : ""}`)) return;
+    setRemovingTop({ ...removingTop, busy: true, error: "" });
+    try {
+      if (mode === "move") {
+        const saved: Position = await updatePosition(pos.id, { department_id: deptId });
+        setPositions((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+        const moved: Employee[] = await Promise.all(staff.map((e) => updateEmployee(e.id, { department_id: deptId })));
+        const byId = new Map(moved.map((e) => [e.id, e]));
+        setEmployees((prev) => prev.map((e) => byId.get(e.id) ?? e));
+        setNotice({ text: `«${pos.name}» перенесена в отдел «${dept!.name}»` });
+      } else {
+        const moved: Employee[] = await Promise.all(staff.map((e) => updateEmployee(e.id, { position_id: null, department_id: deptId || null })));
+        const byId = new Map(moved.map((e) => [e.id, e]));
+        setEmployees((prev) => prev.map((e) => byId.get(e.id) ?? e));
+        await deletePosition(pos.id);
+        setPositions((prev) => prev.filter((p) => p.id !== pos.id));
+        if (selection?.id === pos.id) setSelection(null);
+        setNotice({ text: `Должность «${pos.name}» удалена` });
+      }
+      setRemovingTop(null);
+    } catch (err) {
+      setRemovingTop({ ...removingTop, busy: false, error: apiError(err, "Не удалось сохранить. Изменения не применены полностью — обновите страницу.") });
+    }
   };
   const changeHead = async (dept: Department, headId: string) => {
     try {
@@ -703,6 +742,13 @@ const StructureMapPage: React.FC = () => {
             <span>Руководство</span>
             <h3 className={s.deptName}>{p.name}</h3>
           </button>
+          {canEdit && (
+            <span className={s.cardTools}>
+              <button type="button" className={s.iconBtn} onClick={() => openRemoveTop(p)} aria-label={`Убрать из руководства ${p.name}`} title="Убрать из руководства">
+                <Trash2 size={14} aria-hidden="true" />
+              </button>
+            </span>
+          )}
         </div>
         {staff.length ? staff.map((e) => {
           const st = statsOf(e.id);
@@ -842,6 +888,38 @@ const StructureMapPage: React.FC = () => {
           </section>
 
           {inspector && <aside className={s.inspector} aria-label="Информационная карточка">{inspector}</aside>}
+        </div>
+      )}
+
+      {removingTop && (
+        <div className={s.backdrop} onClick={(e) => e.target === e.currentTarget && !removingTop.busy && setRemovingTop(null)}>
+          <div className={`${s.report} ${s.dialogSmall}`} role="dialog" aria-modal="true" aria-label="Убрать из руководства" onKeyDown={(e) => e.key === "Escape" && !removingTop.busy && setRemovingTop(null)}>
+            <div className={s.reportHead}>
+              <div>
+                <strong className={s.heroTitle}>Убрать «{removingTop.pos.name}» из руководства</strong>
+                <p className={s.muted}>
+                  {holders(removingTop.pos.id).length
+                    ? `На должности: ${holders(removingTop.pos.id).map((e) => e.full_name).join(", ")}. Руководство отделами не изменится.`
+                    : "На должности никого нет."}
+                </p>
+              </div>
+              <button type="button" className={s.closeBtn} onClick={() => setRemovingTop(null)} disabled={removingTop.busy} aria-label="Закрыть" autoFocus><X size={16} aria-hidden="true" /></button>
+            </div>
+            <label className={s.field}>
+              <span>Отдел, куда перенести должность и сотрудников</span>
+              <select value={removingTop.deptId} disabled={removingTop.busy} onChange={(e) => setRemovingTop({ ...removingTop, deptId: e.target.value, error: "" })}>
+                <option value="">— выберите отдел —</option>
+                {deptRows.map(({ d, depth }) => <option key={d.id} value={d.id}>{"\u00a0\u00a0".repeat(depth)}{d.name}</option>)}
+              </select>
+            </label>
+            {removingTop.error && <p className={s.formError}>{removingTop.error}</p>}
+            <div className={s.dialogActions}>
+              <button type="button" className={`${s.button} ${s.danger}`} onClick={() => removeTop("delete")} disabled={removingTop.busy}>Удалить должность</button>
+              <span />
+              <button type="button" className={s.button} onClick={() => setRemovingTop(null)} disabled={removingTop.busy}>Отмена</button>
+              <button type="button" className={`${s.button} ${s.primary}`} onClick={() => removeTop("move")} disabled={removingTop.busy}>Перенести в отдел</button>
+            </div>
+          </div>
         </div>
       )}
 

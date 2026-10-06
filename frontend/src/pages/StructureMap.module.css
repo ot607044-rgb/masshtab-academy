@@ -303,3 +303,10 @@ div.module { max-width: none; padding: 12px 20px 20px; }
 .num { text-align: right; white-space: nowrap; }
 .foreign { color: #b07a2a; font-style: normal; }
 .warn { color: #9a6418; }
+.dialogSmall { width: min(500px, 100%); }
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; color: #6f6979; font-size: 12px; font-weight: 600; }
+.field select { height: 38px; padding: 0 8px; border: 1px solid #e0dde7; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 400; color: var(--ink); background: #fff; }
+.dialogActions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.dialogActions > span { flex: 1; }
+.danger { border-color: #f1c9c9; color: #b33a3a; }
+.danger:hover:not(:disabled) { border-color: #e39b9b; background: #fff6f6; }

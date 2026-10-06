@@ -213,3 +213,48 @@ test("employee is shown in own department even if the position belongs to anothe
   expect(patches).toEqual([{ path: "/api/v1/employees/e3", body: { department_id: "d1", position_id: "p1" } }]);
   await expect(page.getByRole("list", { name: "Должности: Кадровый отдел" })).toHaveCount(0);
 });
+
+test("leadership position can be returned to a department or deleted", async ({ page }) => {
+  const calls: string[] = [];
+  await page.route("**/api/v1/positions/", route => route.request().method() === "GET"
+    ? route.fulfill({ json: [
+      { id: "p1", name: "Главный бухгалтер", department_id: "d2", company_id: "company" },
+      { id: "t1", name: "РОБ Ведущих", department_id: null, company_id: "company" },
+      { id: "t2", name: "Собственник", department_id: null, company_id: "company" },
+    ] })
+    : route.fallback());
+  await page.route("**/api/v1/employees/", route => route.fulfill({ json: [
+    { id: "e1", full_name: "Ольга Юнусова", department_id: "d1", position_id: null },
+    { id: "e2", full_name: "Римма Адилова", department_id: "d2", position_id: "p1" },
+    { id: "e4", full_name: "Ксения Андреева", department_id: null, position_id: "t1" },
+  ] }));
+  await page.route(/\/api\/v1\/(positions|employees)\/[a-z0-9]+$/, async route => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    calls.push(`${req.method()} ${path} ${req.postData() ?? ""}`);
+    if (req.method() === "DELETE") return route.fulfill({ status: 204, body: "" });
+    const body = req.postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: path.includes("positions")
+      ? { id: path.split("/").pop(), name: "РОБ Ведущих", company_id: "company", ...body }
+      : { id: "e4", full_name: "Ксения Андреева", company_id: "company", position_id: "t1", ...body } });
+  });
+  page.on("dialog", dialog => dialog.accept());
+  await page.goto("/dashboard/organization");
+
+  await page.getByRole("button", { name: "Убрать из руководства РОБ Ведущих" }).click();
+  const dialog = page.getByRole("dialog", { name: "Убрать из руководства" });
+  await dialog.getByRole("combobox").selectOption({ label: "Кадровый отдел" });
+  await dialog.getByRole("button", { name: "Перенести в отдел" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Должности: Кадровый отдел" })).toContainText("РОБ Ведущих");
+  expect(calls).toEqual([
+    'PATCH /api/v1/positions/t1 {"department_id":"d3"}',
+    'PATCH /api/v1/employees/e4 {"department_id":"d3"}',
+  ]);
+
+  calls.length = 0;
+  await page.getByRole("button", { name: "Убрать из руководства Собственник" }).click();
+  await dialog.getByRole("button", { name: "Удалить должность" }).click();
+  await expect(page.getByRole("heading", { name: "Собственник", exact: true })).toHaveCount(0);
+  expect(calls).toEqual(["DELETE /api/v1/positions/t2 "]);
+});
