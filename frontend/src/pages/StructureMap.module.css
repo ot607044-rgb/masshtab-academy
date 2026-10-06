@@ -259,3 +259,17 @@ div.module { max-width: none; padding: 12px 20px 20px; }
   .shortcut { display: none; }
   .rootNode { width: min(300px, 100%); }
 }
+
+/* Drag & drop */
+.draggable { cursor: grab; }
+.draggable:active { cursor: grabbing; }
+.dragging { opacity: .45; }
+.dropOver { border-radius: 14px; background: rgba(105, 82, 217, .07); box-shadow: 0 0 0 2px #806bdb, 0 0 0 6px #ece8fc; }
+.roleBranch.dropOver { border-radius: 10px; }
+.toast {
+  position: fixed; z-index: 60; right: 24px; bottom: 24px; max-width: min(460px, calc(100vw - 32px)); padding: 12px 16px;
+  display: flex; align-items: center; gap: 9px; border: 1px solid #dcd7ea; border-radius: 12px; background: #302b3b; color: #fff;
+  box-shadow: 0 12px 30px #241e3530; font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.toast span { width: 20px; height: 20px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: #302b3b; background: #9ee0c4; }
+.toastError span { background: #f4b4b4; }

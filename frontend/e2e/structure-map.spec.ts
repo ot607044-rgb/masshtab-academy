@@ -123,3 +123,34 @@ test("structure map fits many branches into the screen width without horizontal 
   await card.getByRole("button", { name: "Закрыть карточку" }).click();
   await expect(card).toHaveCount(0);
 });
+
+test("drag and drop moves a position with its staff and reassigns an employee", async ({ page }) => {
+  const patches: { path: string; body: Record<string, unknown> }[] = [];
+  await page.route(/\/api\/v1\/(positions|employees)\/[a-z0-9]+$/, async route => {
+    const path = new URL(route.request().url()).pathname;
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    patches.push({ path, body });
+    const id = path.split("/").pop();
+    const base = path.includes("positions")
+      ? { id, name: "Главный бухгалтер", company_id: "company", department_id: "d2" }
+      : { id, full_name: id === "e2" ? "Римма Адилова" : "Ольга Юнусова", company_id: "company", department_id: "d2", position_id: "p1" };
+    await route.fulfill({ json: { ...base, ...body } });
+  });
+  page.on("dialog", dialog => dialog.accept());
+  await page.goto("/dashboard/organization");
+
+  const role = page.getByRole("list", { name: "Должности: Отдел ГБ" }).getByText("Главный бухгалтер", { exact: true });
+  await role.dragTo(page.getByRole("heading", { name: "Кадровый отдел", exact: true }));
+  await expect(page.getByRole("list", { name: "Должности: Кадровый отдел" })).toContainText("Главный бухгалтер");
+  expect(patches).toEqual([
+    { path: "/api/v1/positions/p1", body: { department_id: "d3" } },
+    { path: "/api/v1/employees/e2", body: { department_id: "d3" } },
+  ]);
+  await expect(page.getByRole("status")).toContainText("перенесена");
+
+  patches.length = 0;
+  await page.getByRole("button", { name: "Показать сотрудников: Без должности" }).click();
+  const person = page.getByRole("button", { name: /Ольга Юнусова/ }).last();
+  await person.dragTo(page.getByRole("list", { name: "Должности: Кадровый отдел" }).getByText("Главный бухгалтер", { exact: true }));
+  expect(patches).toEqual([{ path: "/api/v1/employees/e1", body: { position_id: "p1", department_id: "d3" } }]);
+});

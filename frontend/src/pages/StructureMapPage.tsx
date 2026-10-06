@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Building2, ChevronRight, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from "../api/departments";
-import { getPositions, createPosition } from "../api/positions";
-import { getEmployees } from "../api/employees";
+import { getPositions, createPosition, updatePosition } from "../api/positions";
+import { getEmployees, updateEmployee } from "../api/employees";
 import { getCompany } from "../api/companies";
 import type { Department, Employee, Position } from "../types";
 import { EMPLOYEE_STATUS_LABELS } from "../types";
@@ -19,6 +19,9 @@ const COL_MIN = 228, COL_MAX = 300, GAP = 10, SPINE = 14;
 
 type Draft = { kind: "department" | "position"; parentId: string | null };
 type Selection = { kind: "department" | "position" | "employee"; id: string } | null;
+type Drag = { kind: "position" | "employee"; id: string };
+type DropTarget = { kind: "department" | "position"; id: string };
+type DragAttrs = Pick<React.HTMLAttributes<HTMLElement>, "draggable" | "onDragStart" | "onDragEnd">;
 
 const apiError = (err: unknown, fallback: string) => {
   const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -57,8 +60,8 @@ const InlineForm: React.FC<{ label: string; placeholder: string; onSubmit: (name
   );
 };
 
-const PersonNode: React.FC<{ title: string; name: string; tone: string; selected: boolean; compact?: boolean; onSelect: () => void }> = ({ title, name, tone, selected, compact, onSelect }) => (
-  <button type="button" className={`${s.personNode} ${compact ? s.compact : ""} ${selected ? s.selected : ""}`} onClick={onSelect} aria-pressed={selected}>
+const PersonNode: React.FC<{ title: string; name: string; tone: string; selected: boolean; compact?: boolean; onSelect: () => void; drag?: DragAttrs }> = ({ title, name, tone, selected, compact, onSelect, drag }) => (
+  <button type="button" className={`${s.personNode} ${compact ? s.compact : ""} ${selected ? s.selected : ""} ${drag?.draggable ? s.draggable : ""}`} onClick={onSelect} aria-pressed={selected} {...drag}>
     <span className={`${s.avatar} ${s[`tone_${tone}`]}`}>{initials(name)}</span>
     <span className={s.personCopy}><strong>{title}</strong><small>{name}</small></span>
     {!compact && <ChevronRight size={15} aria-hidden="true" />}
@@ -85,6 +88,15 @@ const StructureMapPage: React.FC = () => {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(0);
   const newColumnRef = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [busyMove, setBusyMove] = useState(false);
+  const [over, setOver] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     if (user?.company_id) getCompany(user.company_id).then((c) => c?.name && setCompanyName(c.name)).catch(() => undefined);
@@ -208,6 +220,97 @@ const StructureMapPage: React.FC = () => {
     setDraft({ kind: "department", parentId: null });
     requestAnimationFrame(() => newColumnRef.current?.scrollIntoView({ behavior: "smooth", inline: "end", block: "nearest" }));
   };
+  // ── Drag & drop: positions → departments, employees → positions / departments ──
+  const canDrop = (d: Drag | null, target: DropTarget) => {
+    if (!d || !canEdit) return false;
+    if (d.kind === "position") return target.kind === "department" && posById.get(d.id)?.department_id !== target.id;
+    const emp = empById.get(d.id);
+    if (!emp) return false;
+    return target.kind === "position" ? emp.position_id !== target.id : emp.department_id !== target.id;
+  };
+  const dragAttrs = (kind: Drag["kind"], id: string): DragAttrs => (canEdit && !busyMove ? {
+    draggable: true,
+    onDragStart: (e) => {
+      e.stopPropagation();
+      e.dataTransfer.setData("text/plain", id);
+      e.dataTransfer.effectAllowed = "move";
+      setDrag({ kind, id });
+    },
+    onDragEnd: () => { setDrag(null); setOver(null); },
+  } : {});
+  const dropAttrs = (target: DropTarget) => {
+    const key = `${target.kind}:${target.id}`;
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (!drag) return;
+        // An invalid position target lets the enclosing department take the drop.
+        if (!canDrop(drag, target)) { if (target.kind === "department") { e.stopPropagation(); if (over === key) setOver(null); } return; }
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        if (over !== key) setOver(key);
+      },
+      onDragLeave: (e: React.DragEvent) => {
+        if (over === key && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setOver(null);
+      },
+      onDrop: (e: React.DragEvent) => {
+        if (!drag || !canDrop(drag, target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const current = drag;
+        setDrag(null);
+        setOver(null);
+        void move(current, target);
+      },
+    };
+  };
+  const dropClass = (target: DropTarget) => (over === `${target.kind}:${target.id}` ? s.dropOver : "");
+  const move = async (d: Drag, target: DropTarget) => {
+    try {
+      if (d.kind === "position") {
+        const pos = posById.get(d.id)!;
+        const dept = deptById.get(target.id)!;
+        const staff = holders(pos.id).filter((e) => e.department_id !== dept.id);
+        if (!confirm(`Перенести должность «${pos.name}» в отдел «${dept.name}»?${staff.length ? `\nСотрудники на должности (${staff.length}) перейдут вместе с ней.` : ""}`)) return;
+        setBusyMove(true);
+        const saved: Position = await updatePosition(pos.id, { department_id: dept.id });
+        setPositions((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+        const moved: Employee[] = await Promise.all(staff.map((e) => updateEmployee(e.id, { department_id: dept.id })));
+        const byId = new Map(moved.map((e) => [e.id, e]));
+        setEmployees((prev) => prev.map((e) => byId.get(e.id) ?? e));
+        setCollapsed((prev) => { const next = new Set(prev); next.delete(dept.id); return next; });
+        setNotice({ text: `Должность «${pos.name}» перенесена в «${dept.name}»` });
+        return;
+      }
+      const emp = empById.get(d.id)!;
+      let payload: { department_id: string | null; position_id: string | null };
+      let text: string;
+      if (target.kind === "position") {
+        const pos = posById.get(target.id)!;
+        const dept = pos.department_id ? deptById.get(pos.department_id) : undefined;
+        if (!confirm(`Назначить ${emp.full_name} на должность «${pos.name}»${dept ? ` (отдел «${dept.name}»)` : ""}?`)) return;
+        payload = { position_id: pos.id, department_id: pos.department_id };
+        text = `${emp.full_name} → «${pos.name}»`;
+      } else {
+        const dept = deptById.get(target.id)!;
+        const keep = emp.position_id && posById.get(emp.position_id)?.department_id === dept.id;
+        if (!confirm(`Перевести ${emp.full_name} в отдел «${dept.name}»?${keep ? "" : "\nТекущая должность будет снята — назначьте новую, перетащив сотрудника на должность."}`)) return;
+        payload = { department_id: dept.id, position_id: keep ? emp.position_id : null };
+        text = `${emp.full_name} переведён(а) в «${dept.name}»`;
+      }
+      setBusyMove(true);
+      const saved: Employee = await updateEmployee(emp.id, payload);
+      setEmployees((prev) => prev.map((e) => (e.id === saved.id ? saved : e)));
+      const roleKey = saved.position_id && posById.has(saved.position_id) ? saved.position_id : `${NO_POSITION}:${saved.department_id}`;
+      setOpenRoles((prev) => new Set(prev).add(roleKey));
+      setNotice({ text });
+    } catch (err) {
+      setNotice({ text: apiError(err, "Не удалось перенести. Изменения не сохранены."), error: true });
+    } finally {
+      setBusyMove(false);
+    }
+  };
+
   const isDraft = (kind: Draft["kind"], parentId: string | null) => draft?.kind === kind && draft.parentId === parentId;
   const isSel = (kind: NonNullable<Selection>["kind"], id: string) => selection?.kind === kind && selection.id === id;
 
@@ -229,8 +332,9 @@ const StructureMapPage: React.FC = () => {
     const shown = showAll ? staff : staff.filter((e) => matches!.emps.has(e.id));
     const open = openRoles.has(key) || (!!matches && staff.some((e) => matches.emps.has(e.id)));
     return (
-      <li key={key} className={s.roleBranch}>
-        <div className={`${s.roleNode} ${position && isSel("position", position.id) ? s.roleSelected : ""} ${hit(name) ? s.hit : ""}`}>
+      <li key={key} className={`${s.roleBranch} ${position ? dropClass({ kind: "position", id: position.id }) : ""}`} {...(position ? dropAttrs({ kind: "position", id: position.id }) : {})}>
+        <div className={`${s.roleNode} ${position && isSel("position", position.id) ? s.roleSelected : ""} ${hit(name) ? s.hit : ""} ${position && canEdit ? s.draggable : ""} ${drag?.kind === "position" && drag.id === position?.id ? s.dragging : ""}`}
+          {...(position ? dragAttrs("position", position.id) : {})} title={position && canEdit ? "Перетащите в другой отдел" : undefined}>
           <button type="button" className={s.disclosure} aria-expanded={open} aria-label={`${open ? "Скрыть" : "Показать"} сотрудников: ${name}`}
             onClick={() => toggle(setOpenRoles, key)} disabled={staff.length === 0}>
             <ChevronRight size={14} aria-hidden="true" className={open ? s.rotated : ""} />
@@ -244,7 +348,7 @@ const StructureMapPage: React.FC = () => {
           <ul className={s.employees}>
             {shown.map((e) => (
               <li key={e.id} className={s.employeeNode}>
-                <PersonNode compact title={titleOf(e)} name={e.full_name} tone={toneOf(deptId)} selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} />
+                <PersonNode compact title={titleOf(e)} name={e.full_name} tone={toneOf(deptId)} selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} drag={dragAttrs("employee", e.id)} />
               </li>
             ))}
           </ul>
@@ -282,7 +386,7 @@ const StructureMapPage: React.FC = () => {
     const open = deptOpen(dept.id);
     const Heading = depth <= 1 ? "h4" : "h5";
     return (
-      <div key={dept.id} className={s.unitBranch}>
+      <div key={dept.id} className={`${s.unitBranch} ${dropClass({ kind: "department", id: dept.id })}`} {...dropAttrs({ kind: "department", id: dept.id })}>
         <div className={`${s.unitNode} ${isSel("department", dept.id) ? s.unitSelected : ""} ${hit(dept.name) ? s.hit : ""}`}>
           <button type="button" className={s.disclosure} aria-expanded={open} aria-label={`${open ? "Свернуть" : "Раскрыть"} отдел ${dept.name}`} onClick={() => toggle(setCollapsed, dept.id)}>
             <ChevronRight size={14} aria-hidden="true" className={open ? s.rotated : ""} />
@@ -306,7 +410,7 @@ const StructureMapPage: React.FC = () => {
     const head = dept.head_id ? empById.get(dept.head_id) : undefined;
     const subCount = descendants(dept.id).length;
     return (
-      <div key={dept.id} className={`${s.leaderBranch} ${open ? s.expanded : ""}`}>
+      <div key={dept.id} className={`${s.leaderBranch} ${open ? s.expanded : ""} ${dropClass({ kind: "department", id: dept.id })}`} {...dropAttrs({ kind: "department", id: dept.id })}>
         <div className={`${s.leaderCard} ${isSel("department", dept.id) ? s.cardSelected : ""}`}>
           <div className={`${s.departmentTitle} ${hit(dept.name) ? s.hit : ""}`}>
             <button type="button" className={s.titleBtn} onClick={() => setSelection({ kind: "department", id: dept.id })}>
@@ -517,7 +621,7 @@ const StructureMapPage: React.FC = () => {
       ) : (
         <div className={`${s.workspace} ${inspector ? s.withInspector : ""}`}>
           <section className={s.canvas} aria-label="Оргструктура">
-            <span className={s.structureKey}><i /> линия прямого подчинения</span>
+            <span className={s.structureKey}><i /> линия прямого подчинения{canEdit && <> · перетащите должность или сотрудника, чтобы перенести</>}</span>
             <div className={s.scroller} ref={scrollerRef}>
               <div className={s.orgTree}>
                 <div className={s.rootNode}>
@@ -543,6 +647,12 @@ const StructureMapPage: React.FC = () => {
 
           {inspector && <aside className={s.inspector} aria-label="Информационная карточка">{inspector}</aside>}
         </div>
+      )}
+
+      {notice && (
+        <button type="button" className={`${s.toast} ${notice.error ? s.toastError : ""}`} onClick={() => setNotice(null)} role="status">
+          <span>{notice.error ? "!" : "✓"}</span>{notice.text}
+        </button>
       )}
 
       {editing && (
