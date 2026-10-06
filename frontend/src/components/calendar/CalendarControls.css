@@ -147,3 +147,39 @@
   .calendar-module .stat-card b.stat-slot { font-size: 18px; }
   .calendar-module .stat-icon { width: 30px; height: 30px; top: 12px; right: 12px; }
 }
+
+/* Readable type in the availability dialog. */
+.calendar-module .availability-head .eyebrow { font-size: 11px; }
+.calendar-module .availability-head p, .calendar-module .panel-title p { font-size: 13px; }
+.calendar-module .availability-tabs button { min-height: 40px; font-size: 14px; }
+.calendar-module .availability-tabs button span { width: 22px; height: 22px; font-size: 11px; }
+.calendar-module .panel-title b { font-size: 16px; }
+.calendar-module .timezone, .calendar-module .timezone select { font-size: 13px; }
+.calendar-module .week-row { min-height: 56px; grid-template-columns: 40px 130px 100px 16px 100px 30px; gap: 8px; }
+.calendar-module .week-row b { font-size: 14px; }
+.calendar-module .week-row input.time-field { height: 36px; font-size: 14px; }
+.calendar-module .day-off { font-size: 13px; }
+.calendar-module .toggle { width: 34px; height: 20px; }
+.calendar-module .toggle i { width: 16px; height: 16px; }
+.calendar-module .settings-summary > b { font-size: 15px; }
+.calendar-module .settings-summary > p { font-size: 13px; }
+.calendar-module .formula { font-size: 11px; }
+.calendar-module .compact-label > span { font-size: 12px; }
+.calendar-module .select-field { height: 40px; font-size: 14px; }
+.calendar-module .availability-footer > span { font-size: 13px; }
+.calendar-module .availability-footer .plain-btn { min-height: 42px; padding: 0 16px; font-size: 14px; }
+.calendar-module .exception-date b { font-size: 17px; } .calendar-module .exception-date small { font-size: 10px; }
+.calendar-module .exception-date { width: 46px; height: 50px; }
+.calendar-module .exception-row > span:nth-child(2) b { font-size: 14px; }
+.calendar-module .exception-row > span:nth-child(2) small, .calendar-module .exception-row em { font-size: 12px; }
+.calendar-module .exceptions-note b { font-size: 13px; } .calendar-module .exceptions-note small { font-size: 12px; }
+.calendar-module .link-status b { font-size: 15px; } .calendar-module .link-status small { font-size: 12px; }
+.calendar-module .share-box label, .calendar-module .share-box > small { font-size: 12px; }
+.calendar-module .share-box > div span, .calendar-module .share-box > div button { font-size: 13px; }
+.calendar-module .privacy-grid b { font-size: 13px; } .calendar-module .privacy-grid small { font-size: 12px; }
+.calendar-module .preview-card b { font-size: 14px; } .calendar-module .preview-card small { font-size: 12px; }
+.calendar-module .revoke-link { font-size: 13px; }
+@media (max-width: 760px) {
+  .calendar-module .week-row { grid-template-columns: 36px minmax(70px, 1fr) 84px 8px 84px 24px; gap: 4px; }
+  .calendar-module .availability-tabs button { font-size: 13px; }
+}
