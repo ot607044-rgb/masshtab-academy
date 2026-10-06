@@ -6,6 +6,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, Http
 
 VacancyStatus = Literal["request", "open", "paused", "closed"]
 CandidateStage = Literal["new", "review", "interview", "testing", "offer", "rejected"]
+MeetingType = Literal["interview", "work", "planning", "other"]
 
 
 class VacancyCreate(BaseModel):
@@ -39,7 +40,8 @@ class CandidatePatch(BaseModel):
 
 class InterviewCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    candidate_id: UUID
+    candidate_id: UUID | None = None
+    meeting_type: MeetingType = "interview"
     title: str = Field(min_length=1, max_length=300)
     starts_at: AwareDatetime
     duration_minutes: int = Field(default=30, ge=5, le=480)
@@ -51,6 +53,7 @@ class InterviewCreate(BaseModel):
 class InterviewPatch(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     candidate_id: UUID | None = None
+    meeting_type: MeetingType | None = None
     title: str | None = Field(default=None, min_length=1, max_length=300)
     starts_at: AwareDatetime | None = None
     duration_minutes: int | None = Field(default=None, ge=5, le=480)

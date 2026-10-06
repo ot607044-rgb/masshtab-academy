@@ -14,7 +14,8 @@ export interface Candidate {
   employee_id: string | null; created_at: string;
 }
 export interface Interview {
-  id: string; candidate_id: string; candidate_name: string;
+  id: string; candidate_id: string | null; candidate_name: string | null;
+  meeting_type: "interview" | "work" | "planning" | "other";
   title: string; starts_at: string; duration_minutes: number;
   participant_ids: string[]; participants?: CalendarParticipant[];
   meeting_url: string | null; notes: string | null;

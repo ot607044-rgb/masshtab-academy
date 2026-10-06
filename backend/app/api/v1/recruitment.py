@@ -62,7 +62,7 @@ def participant_data(user: User):
     return {"id": user.id, "full_name": user.full_name, "email": user.email, "role": user.role}
 
 
-async def serialize_interview(db: AsyncSession, record: Interview, candidate_name: str, company_id: UUID):
+async def serialize_interview(db: AsyncSession, record: Interview, candidate_name: str | None, company_id: UUID):
     participant_ids = [UUID(str(item)) for item in (record.participant_ids or [])]
     users = await participants_map(db, company_id, participant_ids)
     data = record_data(record)
@@ -73,7 +73,7 @@ async def serialize_interview(db: AsyncSession, record: Interview, candidate_nam
     return data
 
 
-async def ensure_interview_available(db: AsyncSession, company_id: UUID, candidate_id: UUID, participant_ids: list[UUID], starts_at: datetime, duration_minutes: int, exclude_id: UUID | None = None):
+async def ensure_interview_available(db: AsyncSession, company_id: UUID, candidate_id: UUID | None, participant_ids: list[UUID], starts_at: datetime, duration_minutes: int, exclude_id: UUID | None = None):
     start_utc = starts_at.astimezone(timezone.utc)
     end_utc = start_utc + timedelta(minutes=duration_minutes)
     rows = (await db.execute(select(Interview).where(Interview.company_id == company_id))).scalars().all()
@@ -86,7 +86,7 @@ async def ensure_interview_available(db: AsyncSession, company_id: UUID, candida
         if not overlaps(start_utc, end_utc, record_start, record_end):
             continue
         record_participants = {str(item) for item in (record.participant_ids or [])}
-        if record.candidate_id == candidate_id or participant_set.intersection(record_participants):
+        if (candidate_id is not None and record.candidate_id == candidate_id) or participant_set.intersection(record_participants):
             raise HTTPException(409, "Выбранное время занято")
 
 
@@ -241,7 +241,7 @@ async def participants(company_id: UUID = Depends(get_effective_company_id), db:
 
 @router.get("/interviews")
 async def interviews(start: datetime | None = None, end: datetime | None = None, company_id: UUID = Depends(get_effective_company_id), db: AsyncSession = Depends(get_db)):
-    query = select(Interview, Candidate.full_name).join(Candidate, (Interview.candidate_id == Candidate.id) & (Candidate.company_id == company_id)).where(Interview.company_id == company_id)
+    query = select(Interview, Candidate.full_name).outerjoin(Candidate, (Interview.candidate_id == Candidate.id) & (Candidate.company_id == company_id)).where(Interview.company_id == company_id)
     for bound in (start, end):
         if bound is not None and bound.tzinfo is None:
             raise HTTPException(422, "Укажите часовой пояс")
@@ -262,7 +262,7 @@ async def interview_calendar(start: datetime, end: datetime, day: datetime, comp
             raise HTTPException(422, "Укажите часовой пояс")
     if end <= start:
         raise HTTPException(422, "Конец периода должен быть позже начала")
-    query = select(Interview, Candidate.full_name).join(Candidate, (Interview.candidate_id == Candidate.id) & (Candidate.company_id == company_id)).where(Interview.company_id == company_id, Interview.starts_at >= start.astimezone(timezone.utc), Interview.starts_at < end.astimezone(timezone.utc)).order_by(Interview.starts_at)
+    query = select(Interview, Candidate.full_name).outerjoin(Candidate, (Interview.candidate_id == Candidate.id) & (Candidate.company_id == company_id)).where(Interview.company_id == company_id, Interview.starts_at >= start.astimezone(timezone.utc), Interview.starts_at < end.astimezone(timezone.utc)).order_by(Interview.starts_at)
     rows = (await db.execute(query)).all()
     records = [record for record, _ in rows]
     day_start = datetime.combine(day.date(), time.min, tzinfo=day.tzinfo)
@@ -281,8 +281,8 @@ async def interview_calendar(start: datetime, end: datetime, day: datetime, comp
 
 @router.post("/interviews", status_code=201)
 async def create_interview(data: InterviewCreate, company_id: UUID = Depends(get_effective_company_id), user=Depends(get_hr_or_above), db: AsyncSession = Depends(get_db)):
-    candidate = await company_record(db, Candidate, data.candidate_id, company_id)
-    if candidate.stage in ("hired", "rejected"):
+    candidate = await company_record(db, Candidate, data.candidate_id, company_id) if data.candidate_id else None
+    if candidate and candidate.stage in ("hired", "rejected"):
         raise HTTPException(409, "Кандидат больше не участвует в подборе")
     participant_ids = list(dict.fromkeys(data.participant_ids))
     await participants_map(db, company_id, participant_ids)
@@ -295,20 +295,21 @@ async def create_interview(data: InterviewCreate, company_id: UUID = Depends(get
     db.add(record)
     await db.commit()
     await db.refresh(record)
-    return await serialize_interview(db, record, candidate.full_name, company_id)
+    return await serialize_interview(db, record, candidate.full_name if candidate else None, company_id)
 
 
 @router.patch("/interviews/{record_id}")
 async def update_interview(record_id: UUID, data: InterviewPatch, company_id: UUID = Depends(get_effective_company_id), db: AsyncSession = Depends(get_db)):
     record = await company_record(db, Interview, record_id, company_id, lock=True)
-    candidate = await company_record(db, Candidate, data.candidate_id or record.candidate_id, company_id)
-    if candidate.stage in ("hired", "rejected"):
+    candidate_id = data.candidate_id if "candidate_id" in data.model_fields_set else record.candidate_id
+    candidate = await company_record(db, Candidate, candidate_id, company_id) if candidate_id else None
+    if candidate and candidate.stage in ("hired", "rejected"):
         raise HTTPException(409, "Кандидат больше не участвует в подборе")
     participant_ids = list(dict.fromkeys(data.participant_ids if data.participant_ids is not None else [UUID(str(item)) for item in (record.participant_ids or [])]))
     await participants_map(db, company_id, participant_ids)
-    starts_at = data.starts_at or record.starts_at
+    starts_at = data.starts_at or interview_start(record)
     duration_minutes = data.duration_minutes or record.duration_minutes
-    await ensure_interview_available(db, company_id, candidate.id, participant_ids, starts_at, duration_minutes, exclude_id=record.id)
+    await ensure_interview_available(db, company_id, candidate.id if candidate else None, participant_ids, starts_at, duration_minutes, exclude_id=record.id)
     for field, value in data.model_dump(exclude_unset=True).items():
         if field == "starts_at" and value is not None:
             value = value.astimezone(timezone.utc)
@@ -319,7 +320,7 @@ async def update_interview(record_id: UUID, data: InterviewPatch, company_id: UU
         setattr(record, field, value)
     await db.commit()
     await db.refresh(record)
-    return await serialize_interview(db, record, candidate.full_name, company_id)
+    return await serialize_interview(db, record, candidate.full_name if candidate else None, company_id)
 
 
 @router.delete("/interviews/{record_id}", status_code=204)

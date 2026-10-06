@@ -302,6 +302,35 @@ async def test_interview_is_in_calendar_and_requires_timezone(context):
 
 
 @pytest.mark.asyncio
+async def test_calendar_meeting_can_be_created_without_candidate(context):
+    client, db, user, *_ = context
+    participant = User(id=uuid.uuid4(), company_id=user.company_id, email="lead@example.org", full_name="Lead", hashed_password="unused", role="department_head")
+    db.add(participant)
+    await db.commit()
+
+    payload = {
+        "meeting_type": "planning",
+        "candidate_id": None,
+        "participant_ids": [str(participant.id)],
+        "title": "Командная планёрка",
+        "starts_at": "2026-10-06T11:00:00+05:00",
+        "duration_minutes": 45,
+    }
+    created = await client.post("/api/v1/recruitment/interviews", json=payload)
+    assert created.status_code == 201, created.text
+    assert created.json()["meeting_type"] == "planning"
+    assert created.json()["candidate_id"] is None
+    assert created.json()["candidate_name"] is None
+
+    conflict = await client.post("/api/v1/recruitment/interviews", json={**payload, "title": "Другая встреча", "starts_at": "2026-10-06T11:15:00+05:00"})
+    assert conflict.status_code == 409
+
+    events = (await client.get("/api/v1/recruitment/interviews", params={"start": "2026-10-06T00:00:00+05:00", "end": "2026-10-07T00:00:00+05:00"})).json()
+    assert events[0]["title"] == "Командная планёрка"
+    assert events[0]["participants"][0]["full_name"] == "Lead"
+
+
+@pytest.mark.asyncio
 async def test_interview_participants_conflicts_update_and_calendar_summary(context):
     client, db, user, *_ = context
     participant = User(id=uuid.uuid4(), company_id=user.company_id, email="lead@example.org", full_name="Lead", hashed_password="unused", role="department_head")

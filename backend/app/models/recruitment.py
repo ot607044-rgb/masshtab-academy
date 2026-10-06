@@ -41,7 +41,8 @@ class Interview(Base, TimestampMixin):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    candidate_id = Column(UUID(as_uuid=True), ForeignKey("recruitment_candidates.id", ondelete="CASCADE"), nullable=False)
+    candidate_id = Column(UUID(as_uuid=True), ForeignKey("recruitment_candidates.id", ondelete="SET NULL"), nullable=True)
+    meeting_type = Column(String(30), nullable=False, default="interview")
     title = Column(String(300), nullable=False)
     starts_at = Column(DateTime(timezone=True), nullable=False, index=True)
     duration_minutes = Column(Integer, nullable=False, default=30)

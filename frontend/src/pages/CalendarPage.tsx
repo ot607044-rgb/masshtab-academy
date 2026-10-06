@@ -7,6 +7,7 @@ const dayKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() +
 const minutes = (date: Date) => date.getHours() * 60 + date.getMinutes();
 const timeLabel = (value: string | Date) => new Date(value).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const localInputValue = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+const MEETING_TYPES: Record<Interview["meeting_type"], string> = { interview: "Собеседование", work: "Рабочая встреча", planning: "Планёрка", other: "Другое" };
 
 function weekStart(date: Date) {
   const start = new Date(date);
@@ -25,6 +26,7 @@ function slotLabel(slot: FreeSlot | null) {
 
 function MeetingForm({ candidates, participants, meeting, initialDate, onClose, onSaved }: { candidates: Candidate[]; participants: CalendarParticipant[]; meeting?: Interview; initialDate: Date; onClose: () => void; onSaved: () => Promise<void> }) {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>(meeting?.participant_ids ?? []);
+  const [meetingType, setMeetingType] = useState<Interview["meeting_type"]>(meeting?.meeting_type ?? "work");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const start = meeting ? new Date(meeting.starts_at) : new Date(initialDate);
@@ -40,7 +42,8 @@ function MeetingForm({ candidates, participants, meeting, initialDate, onClose, 
     setError("");
     const form = new FormData(event.currentTarget);
     const payload = {
-      candidate_id: String(form.get("candidate_id")),
+      meeting_type: meetingType,
+      candidate_id: meetingType === "interview" ? String(form.get("candidate_id")) || null : null,
       title: String(form.get("title")),
       starts_at: new Date(String(form.get("starts_at"))).toISOString(),
       duration_minutes: Number(form.get("duration_minutes")),
@@ -63,12 +66,15 @@ function MeetingForm({ candidates, participants, meeting, initialDate, onClose, 
   return <Modal title={meeting ? "Редактировать встречу" : "Назначить встречу"} onClose={onClose}>
     <form onSubmit={submit} className="academy-calendar-form">
       <label htmlFor="calendar-title">Название встречи</label>
-      <input id="calendar-title" name="title" required maxLength={300} defaultValue={meeting?.title ?? "Собеседование"} autoFocus />
-      <label htmlFor="calendar-candidate">Участник подбора</label>
-      <select id="calendar-candidate" name="candidate_id" required defaultValue={meeting?.candidate_id ?? ""}>
-        <option value="">Выберите кандидата</option>
-        {candidates.filter(c => meeting?.candidate_id === c.id || !["hired", "rejected"].includes(c.stage)).map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+      <input id="calendar-title" name="title" required maxLength={300} defaultValue={meeting?.title ?? "Рабочая встреча"} autoFocus />
+      <label htmlFor="calendar-type">Тип встречи</label>
+      <select id="calendar-type" value={meetingType} onChange={event => setMeetingType(event.target.value as Interview["meeting_type"])}>
+        {Object.entries(MEETING_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
+      {meetingType === "interview" && <><label htmlFor="calendar-candidate">Кандидат из подбора</label><select id="calendar-candidate" name="candidate_id" defaultValue={meeting?.candidate_id ?? ""}>
+        <option value="">Без кандидата</option>
+        {candidates.filter(c => meeting?.candidate_id === c.id || !["hired", "rejected"].includes(c.stage)).map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+      </select></>}
       <div className="academy-calendar-form-grid">
         <div><label htmlFor="calendar-start">Дата и время · {Intl.DateTimeFormat().resolvedOptions().timeZone}</label><input id="calendar-start" name="starts_at" type="datetime-local" required defaultValue={localInputValue(start)} /></div>
         <div><label htmlFor="calendar-duration">Длительность</label><select id="calendar-duration" name="duration_minutes" defaultValue={meeting?.duration_minutes ?? 30}><option value="15">15 минут</option><option value="30">30 минут</option><option value="45">45 минут</option><option value="60">1 час</option><option value="90">1,5 часа</option><option value="120">2 часа</option></select></div>
@@ -92,7 +98,8 @@ function MeetingDetails({ meeting, onEdit, onDelete, onClose, busy }: { meeting:
   return <Modal title={meeting.title} onClose={onClose}>
     <div className="academy-meeting-detail">
       <p><Clock size={16} />{dateLabel(meeting.starts_at)} · {timeLabel(meeting.starts_at)} · {meeting.duration_minutes} мин</p>
-      <p><Users size={16} />{meeting.candidate_name}{meeting.participants?.length ? ` · ${meeting.participants.map(item => item.full_name).join(", ")}` : ""}</p>
+      <p><CalendarClock size={16} />{MEETING_TYPES[meeting.meeting_type] ?? "Встреча"}{meeting.candidate_name ? ` · ${meeting.candidate_name}` : ""}</p>
+      <p><Users size={16} />{meeting.participants?.length ? meeting.participants.map(item => item.full_name).join(", ") : "Участники не выбраны"}</p>
       {meeting.notes && <p className="academy-meeting-notes">{meeting.notes}</p>}
       <div className="academy-actions">
         {meeting.meeting_url && <a className="btn-secondary" href={meeting.meeting_url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />Подключиться</a>}
@@ -187,7 +194,8 @@ export default function CalendarPage() {
             {sortedMeetings.map(meeting => {
               const top = Math.max(0, minutes(new Date(meeting.starts_at)) - 9 * 60);
               const height = Math.max(46, meeting.duration_minutes);
-              return <button key={meeting.id} className="academy-calendar-event" style={{ "--event-top": `${top}px`, "--event-height": `${height}px` } as CSSProperties} onClick={() => setSelected(meeting)}><time>{timeLabel(meeting.starts_at)}</time><strong>{meeting.title}</strong><span>{meeting.candidate_name} · {meeting.duration_minutes} мин</span><MoreHorizontal size={16} /></button>;
+              const subtitle = meeting.candidate_name ?? meeting.participants?.map(item => item.full_name).join(", ") ?? MEETING_TYPES[meeting.meeting_type] ?? "Встреча";
+              return <button key={meeting.id} className="academy-calendar-event" style={{ "--event-top": `${top}px`, "--event-height": `${height}px` } as CSSProperties} onClick={() => setSelected(meeting)}><time>{timeLabel(meeting.starts_at)}</time><strong>{meeting.title}</strong><span>{subtitle} · {meeting.duration_minutes} мин</span><MoreHorizontal size={16} /></button>;
             })}
           </div> : <Empty>На этот день встреч нет. Свободные слоты доступны справа.</Empty>}
         </section>
