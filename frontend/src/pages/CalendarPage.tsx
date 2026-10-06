@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import { CalendarClock, CalendarPlus, CheckCircle2, ChevronLeft, ChevronRight, Clock, ExternalLink, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import { PageHeading, Empty, LoadState, Modal, dateLabel } from "../components/AcademyUI";
-import { getCandidates, getInterviewCalendar, getMeetingParticipants, createInterview, updateInterview, cancelInterview, apiError, type CalendarParticipant, type CalendarSummary, type Candidate, type FreeSlot, type Interview } from "../api/workspace";
+import { createCalendarBlock, deleteCalendarBlock, getAvailability, getCandidates, getInterviewCalendar, getMeetingParticipants, updateAvailabilityRules, enablePublicCalendarLink, revokePublicCalendarLink, createInterview, updateInterview, cancelInterview, apiError, type AvailabilityState, type CalendarParticipant, type CalendarSummary, type Candidate, type FreeSlot, type Interview } from "../api/workspace";
 
 const dayKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const minutes = (date: Date) => date.getHours() * 60 + date.getMinutes();
 const timeLabel = (value: string | Date) => new Date(value).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const localInputValue = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 const MEETING_TYPES: Record<Interview["meeting_type"], string> = { interview: "Собеседование", work: "Рабочая встреча", planning: "Планёрка", other: "Другое" };
+const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 function weekStart(date: Date) {
   const start = new Date(date);
@@ -110,11 +111,98 @@ function MeetingDetails({ meeting, onEdit, onDelete, onClose, busy }: { meeting:
   </Modal>;
 }
 
+function AvailabilityPanel({ availability, onSaved }: { availability: AvailabilityState | null; onSaved: () => Promise<void> }) {
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const publicUrl = availability?.public_link ? `${window.location.origin}/book/${availability.public_link.token}` : "";
+
+  async function saveRule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setError("");
+    const form = new FormData(event.currentTarget);
+    const toMinute = (value: string) => {
+      const [hours, mins] = value.split(":").map(Number);
+      return hours * 60 + mins;
+    };
+    try {
+      const existing = (availability?.rules ?? []).map(({ weekday, start_minute, end_minute, slot_minutes }) => ({ weekday, start_minute, end_minute, slot_minutes }));
+      await updateAvailabilityRules([...existing, { weekday: Number(form.get("weekday")), start_minute: toMinute(String(form.get("start"))), end_minute: toMinute(String(form.get("end"))), slot_minutes: Number(form.get("slot")) }]);
+      await onSaved();
+      event.currentTarget.reset();
+    } catch (e) { setError(apiError(e)); } finally { setBusy(false); }
+  }
+
+  async function removeRule(index: number) {
+    setBusy(true); setError("");
+    try {
+      await updateAvailabilityRules((availability?.rules ?? []).filter((_, i) => i !== index).map(({ weekday, start_minute, end_minute, slot_minutes }) => ({ weekday, start_minute, end_minute, slot_minutes })));
+      await onSaved();
+    } catch (e) { setError(apiError(e)); } finally { setBusy(false); }
+  }
+
+  async function saveBlock(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      await createCalendarBlock({ starts_at: new Date(String(form.get("starts_at"))).toISOString(), duration_minutes: Number(form.get("duration")), title: String(form.get("title")) || null });
+      await onSaved();
+      event.currentTarget.reset();
+    } catch (e) { setError(apiError(e)); } finally { setBusy(false); }
+  }
+
+  async function removeBlock(id: string) {
+    setBusy(true); setError("");
+    try {
+      await deleteCalendarBlock(id);
+      await onSaved();
+    } catch (e) { setError(apiError(e)); } finally { setBusy(false); }
+  }
+
+  async function toggleLink(enable: boolean) {
+    setBusy(true); setError("");
+    try {
+      if (enable) await enablePublicCalendarLink();
+      else await revokePublicCalendarLink();
+      await onSaved();
+    } catch (e) { setError(apiError(e)); } finally { setBusy(false); }
+  }
+
+  return <section className="academy-section academy-availability">
+    <div className="academy-section-heading"><h2>Запись по ссылке</h2></div>
+    <form onSubmit={saveRule} className="academy-compact-form">
+      <select name="weekday" defaultValue={0}>{WEEKDAYS.map((day, i) => <option key={day} value={i}>{day}</option>)}</select>
+      <input name="start" type="time" defaultValue="10:00" required />
+      <input name="end" type="time" defaultValue="18:00" required />
+      <select name="slot" defaultValue={30}><option value="15">15 мин</option><option value="30">30 мин</option><option value="60">60 мин</option></select>
+      <button className="btn-secondary" disabled={busy}>Добавить окно</button>
+    </form>
+    <div className="academy-rule-list">
+      {(availability?.rules ?? []).map((rule, index) => <button key={rule.id ?? index} onClick={() => removeRule(index)} disabled={busy}>{WEEKDAYS[rule.weekday]} · {String(Math.floor(rule.start_minute / 60)).padStart(2, "0")}:{String(rule.start_minute % 60).padStart(2, "0")}-{String(Math.floor(rule.end_minute / 60)).padStart(2, "0")}:{String(rule.end_minute % 60).padStart(2, "0")} · {rule.slot_minutes} мин</button>)}
+      {!(availability?.rules?.length) && <small>Открытые окна не заданы</small>}
+    </div>
+    <form onSubmit={saveBlock} className="academy-compact-form">
+      <input name="starts_at" type="datetime-local" required />
+      <select name="duration" defaultValue={30}><option value="15">15 мин</option><option value="30">30 мин</option><option value="60">60 мин</option></select>
+      <input name="title" placeholder="Занято" maxLength={300} />
+      <button className="btn-secondary" disabled={busy}>Заблокировать</button>
+    </form>
+    <div className="academy-rule-list">
+      {(availability?.blocks ?? []).map(block => <button key={block.id} onClick={() => removeBlock(block.id)} disabled={busy}>{timeLabel(block.starts_at)} · {block.duration_minutes} мин</button>)}
+    </div>
+    <div className="academy-public-link">
+      {publicUrl ? <><input readOnly value={publicUrl} /><button className="btn-secondary" onClick={() => navigator.clipboard?.writeText(publicUrl)} type="button">Копировать</button><button className="btn-secondary" onClick={() => toggleLink(false)} disabled={busy} type="button">Отозвать</button></> : <button className="btn-secondary" onClick={() => toggleLink(true)} disabled={busy} type="button">Включить ссылку</button>}
+    </div>
+    {error && <p className="error-msg" role="alert">{error}</p>}
+  </section>;
+}
+
 export default function CalendarPage() {
   const [date, setDate] = useState(() => new Date());
   const [summary, setSummary] = useState<CalendarSummary | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [participants, setParticipants] = useState<CalendarParticipant[]>([]);
+  const [availability, setAvailability] = useState<AvailabilityState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [form, setForm] = useState<"new" | "edit" | null>(null);
@@ -126,10 +214,11 @@ export default function CalendarPage() {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const next = new Date(start); next.setDate(next.getDate() + i); return next; }), [start]);
 
   const reload = useCallback(async () => {
-    const [calendar, people, participantList] = await Promise.all([getInterviewCalendar(start.toISOString(), end.toISOString(), date.toISOString()), getCandidates(), getMeetingParticipants()]);
+    const [calendar, people, participantList, availabilityState] = await Promise.all([getInterviewCalendar(start.toISOString(), end.toISOString(), date.toISOString()), getCandidates(), getMeetingParticipants(), getAvailability()]);
     setSummary(calendar);
     setCandidates(people);
     setParticipants(participantList);
+    setAvailability(availabilityState);
   }, [date, end, start]);
 
   const load = useCallback(() => {
@@ -208,6 +297,7 @@ export default function CalendarPage() {
             {!summary?.free_slots?.length && <Empty>Свободных окон нет</Empty>}
           </div>
         </section>
+        <AvailabilityPanel availability={availability} onSaved={reload} />
         <section className="academy-section">
           <div className="academy-section-heading"><h2>Лучший слот</h2><CalendarClock size={18} /></div>
           {summary?.best_slot ? <button className="academy-best-slot" onClick={() => { setDate(new Date(summary.best_slot!.starts_at)); setForm("new"); }}><strong>{slotLabel(summary.best_slot)}</strong><span>{summary.best_slot.duration_minutes} минут свободно</span></button> : <Empty>Подходящего слота нет</Empty>}

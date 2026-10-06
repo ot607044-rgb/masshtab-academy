@@ -87,6 +87,7 @@ app.include_router(custom_sections.router, prefix="/api/v1/custom-sections", tag
 app.include_router(statuses.router,        prefix="/api/v1/statuses",         tags=["statuses"])
 app.include_router(integrations.router,    prefix="/api/v1/integrations",     tags=["integrations"])
 app.include_router(recruitment.router, prefix="/api/v1/recruitment", tags=["recruitment"])
+app.include_router(recruitment.public_router, prefix="/api/v1/public-calendar", tags=["public-calendar"])
 app.include_router(workspace.router, prefix="/api/v1/workspace", tags=["workspace"])
 app.include_router(access.router, prefix="/api/v1/access", tags=["access"])
 

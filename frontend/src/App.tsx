@@ -29,6 +29,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import WorkspacePage from "./pages/WorkspacePage";
 import RecruitmentPage from "./pages/RecruitmentPage";
 import CalendarPage from "./pages/CalendarPage";
+import PublicBookingPage from "./pages/PublicBookingPage";
 import EmployeeDetailPage from "./pages/EmployeeDetailPage";
 import { LearningPage, MaterialsPage, OrganizationPage } from "./pages/AcademySections";
 
@@ -59,6 +60,7 @@ const RootRedirect: React.FC = () => {
 const AppRoutes: React.FC = () => (
   <Routes>
     <Route path="/login" element={<LoginPage />} />
+    <Route path="/book/:token" element={<PublicBookingPage />} />
     <Route path="/invite/:token" element={<InvitePage />} />
     <Route path="/" element={<RootRedirect />} />
 

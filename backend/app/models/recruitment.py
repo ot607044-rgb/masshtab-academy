@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.database import Base
@@ -49,4 +49,40 @@ class Interview(Base, TimestampMixin):
     participant_ids = Column(JSON, nullable=False, default=list)
     meeting_url = Column(String(2048))
     notes = Column(Text)
+    external_name = Column(String(255))
+    external_contact = Column(String(255))
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+
+
+class CalendarAvailabilityRule(Base, TimestampMixin):
+    __tablename__ = "calendar_availability_rules"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    weekday = Column(Integer, nullable=False)
+    start_minute = Column(Integer, nullable=False)
+    end_minute = Column(Integer, nullable=False)
+    slot_minutes = Column(Integer, nullable=False, default=30)
+
+
+class CalendarBlock(Base, TimestampMixin):
+    __tablename__ = "calendar_blocks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    starts_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    duration_minutes = Column(Integer, nullable=False)
+    title = Column(String(300))
+
+
+class CalendarPublicLink(Base, TimestampMixin):
+    __tablename__ = "calendar_public_links"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String(80), nullable=False, unique=True, index=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    revoked_at = Column(DateTime(timezone=True))

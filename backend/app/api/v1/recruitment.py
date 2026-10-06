@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
 
@@ -10,11 +11,12 @@ from app.database import get_db
 from app.models.department import Department
 from app.models.employee import Employee, EmployeeStatus
 from app.models.position import Position
-from app.models.recruitment import Candidate, Interview, Vacancy
+from app.models.recruitment import CalendarAvailabilityRule, CalendarBlock, CalendarPublicLink, Candidate, Interview, Vacancy
 from app.models.user import User
-from app.schemas.recruitment import CandidateCreate, CandidatePatch, HireRequest, InterviewCreate, InterviewPatch, VacancyCreate, VacancyPatch
+from app.schemas.recruitment import AvailabilityRulesUpdate, CalendarBlockCreate, CandidateCreate, CandidatePatch, HireRequest, InterviewCreate, InterviewPatch, PublicBookingCreate, VacancyCreate, VacancyPatch
 
 router = APIRouter(dependencies=[Depends(get_hr_or_above)])
+public_router = APIRouter()
 
 
 async def company_record(db, model, record_id, company_id, lock=False):
@@ -102,12 +104,93 @@ def slot_payload(start: datetime, end: datetime):
     return {"starts_at": start, "ends_at": end, "duration_minutes": max(0, int((end - start).total_seconds() // 60))}
 
 
-def free_slots_for_day(records: list[Interview], day: datetime):
+def block_start(record):
+    return record.starts_at.replace(tzinfo=timezone.utc) if record.starts_at.tzinfo is None else record.starts_at
+
+
+def block_end(record):
+    return block_start(record) + timedelta(minutes=record.duration_minutes)
+
+
+def ensure_tz(*bounds: datetime):
+    for bound in bounds:
+        if bound.tzinfo is None:
+            raise HTTPException(422, "Укажите часовой пояс")
+
+
+def minute_time(value: int):
+    return time(value // 60, value % 60)
+
+
+def serialize_rule(rule: CalendarAvailabilityRule):
+    return {key: getattr(rule, key) for key in ("id", "weekday", "start_minute", "end_minute", "slot_minutes")}
+
+
+def serialize_block(block: CalendarBlock):
+    return {**record_data(block), "starts_at": block_start(block)}
+
+
+def serialize_public_link(link: CalendarPublicLink | None):
+    if not link or link.revoked_at or not link.enabled:
+        return None
+    return {"token": link.token, "enabled": link.enabled}
+
+
+async def active_public_link(db: AsyncSession, token: str, lock: bool = False):
+    query = select(CalendarPublicLink).where(CalendarPublicLink.token == token, CalendarPublicLink.enabled.is_(True), CalendarPublicLink.revoked_at.is_(None))
+    if lock:
+        query = query.with_for_update()
+    link = (await db.execute(query)).scalar_one_or_none()
+    if not link:
+        raise HTTPException(404, "Ссылка недоступна")
+    return link
+
+
+async def availability_slots(db: AsyncSession, link: CalendarPublicLink, start: datetime, end: datetime):
+    ensure_tz(start, end)
+    if end <= start:
+        raise HTTPException(422, "Конец периода должен быть позже начала")
+    rules = (await db.execute(select(CalendarAvailabilityRule).where(CalendarAvailabilityRule.company_id == link.company_id, CalendarAvailabilityRule.user_id == link.user_id))).scalars().all()
+    interviews = (await db.execute(select(Interview).where(Interview.company_id == link.company_id, Interview.starts_at < end.astimezone(timezone.utc), Interview.starts_at >= (start - timedelta(days=1)).astimezone(timezone.utc)))).scalars().all()
+    blocks = (await db.execute(select(CalendarBlock).where(CalendarBlock.company_id == link.company_id, CalendarBlock.user_id == link.user_id, CalendarBlock.starts_at < end.astimezone(timezone.utc), CalendarBlock.starts_at >= (start - timedelta(days=1)).astimezone(timezone.utc)))).scalars().all()
+    busy = []
+    owner = str(link.user_id)
+    for record in interviews:
+        if owner in {str(item) for item in (record.participant_ids or [])} or record.created_by == link.user_id:
+            busy.append((interview_start(record).astimezone(start.tzinfo), interview_end(record).astimezone(start.tzinfo)))
+    for block in blocks:
+        busy.append((block_start(block).astimezone(start.tzinfo), block_end(block).astimezone(start.tzinfo)))
+    slots = []
+    current_day = datetime.combine(start.date(), time.min, tzinfo=start.tzinfo)
+    end_day = datetime.combine(end.date(), time.min, tzinfo=end.tzinfo) + timedelta(days=1)
+    while current_day < end_day:
+        weekday = current_day.weekday()
+        for rule in rules:
+            if rule.weekday != weekday or rule.end_minute <= rule.start_minute:
+                continue
+            cursor = datetime.combine(current_day.date(), minute_time(rule.start_minute), tzinfo=current_day.tzinfo)
+            window_end = datetime.combine(current_day.date(), minute_time(rule.end_minute), tzinfo=current_day.tzinfo)
+            step = timedelta(minutes=rule.slot_minutes)
+            while cursor + step <= window_end:
+                slot_end = cursor + step
+                if cursor >= start and slot_end <= end and not any(overlaps(cursor, slot_end, busy_start, busy_end) for busy_start, busy_end in busy):
+                    slots.append(slot_payload(cursor, slot_end))
+                cursor += step
+        current_day += timedelta(days=1)
+    return sorted(slots, key=lambda item: item["starts_at"])
+
+
+def free_slots_for_day(records: list[Interview], day: datetime, blocks: list[CalendarBlock] | None = None):
     work_start, work_end = work_bounds(day)
     busy = []
     for record in records:
         start = interview_start(record).astimezone(work_start.tzinfo)
         end = interview_end(record).astimezone(work_start.tzinfo)
+        if overlaps(start, end, work_start, work_end):
+            busy.append((max(start, work_start), min(end, work_end)))
+    for block in blocks or []:
+        start = block_start(block).astimezone(work_start.tzinfo)
+        end = block_end(block).astimezone(work_start.tzinfo)
         if overlaps(start, end, work_start, work_end):
             busy.append((max(start, work_start), min(end, work_end)))
     busy.sort()
@@ -239,6 +322,72 @@ async def participants(company_id: UUID = Depends(get_effective_company_id), db:
     return [participant_data(record) for record in records]
 
 
+@router.get("/availability")
+async def availability(company_id: UUID = Depends(get_effective_company_id), user=Depends(get_hr_or_above), db: AsyncSession = Depends(get_db)):
+    rules = (await db.execute(select(CalendarAvailabilityRule).where(CalendarAvailabilityRule.company_id == company_id, CalendarAvailabilityRule.user_id == user.id).order_by(CalendarAvailabilityRule.weekday, CalendarAvailabilityRule.start_minute))).scalars().all()
+    now = datetime.now(timezone.utc)
+    blocks = (await db.execute(select(CalendarBlock).where(CalendarBlock.company_id == company_id, CalendarBlock.user_id == user.id, CalendarBlock.starts_at >= now - timedelta(days=1)).order_by(CalendarBlock.starts_at).limit(50))).scalars().all()
+    link = (await db.execute(select(CalendarPublicLink).where(CalendarPublicLink.company_id == company_id, CalendarPublicLink.user_id == user.id, CalendarPublicLink.revoked_at.is_(None)).order_by(CalendarPublicLink.created_at.desc()))).scalars().first()
+    return {"rules": [serialize_rule(rule) for rule in rules], "blocks": [serialize_block(block) for block in blocks], "public_link": serialize_public_link(link)}
+
+
+@router.put("/availability/rules")
+async def update_availability_rules(data: AvailabilityRulesUpdate, company_id: UUID = Depends(get_effective_company_id), user=Depends(get_hr_or_above), db: AsyncSession = Depends(get_db)):
+    for rule in data.rules:
+        if rule.end_minute <= rule.start_minute:
+            raise HTTPException(422, "Конец окна должен быть позже начала")
+    existing = (await db.execute(select(CalendarAvailabilityRule).where(CalendarAvailabilityRule.company_id == company_id, CalendarAvailabilityRule.user_id == user.id))).scalars().all()
+    for record in existing:
+        await db.delete(record)
+    await db.flush()
+    records = [CalendarAvailabilityRule(company_id=company_id, user_id=user.id, **rule.model_dump()) for rule in data.rules]
+    db.add_all(records)
+    await db.commit()
+    return {"rules": [serialize_rule(rule) for rule in records]}
+
+
+@router.post("/availability/blocks", status_code=201)
+async def create_block(data: CalendarBlockCreate, company_id: UUID = Depends(get_effective_company_id), user=Depends(get_hr_or_above), db: AsyncSession = Depends(get_db)):
+    record = CalendarBlock(company_id=company_id, user_id=user.id, starts_at=data.starts_at.astimezone(timezone.utc), duration_minutes=data.duration_minutes, title=data.title)
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    return serialize_block(record)
+
+
+@router.delete("/availability/blocks/{record_id}", status_code=204)
+async def delete_block(record_id: UUID, company_id: UUID = Depends(get_effective_company_id), user=Depends(get_hr_or_above), db: AsyncSession = Depends(get_db)):
+    record = (await db.execute(select(CalendarBlock).where(CalendarBlock.id == record_id, CalendarBlock.company_id == company_id, CalendarBlock.user_id == user.id))).scalar_one_or_none()
+    if not record:
+        raise HTTPException(404, "Блокировка не найдена")
+    await db.delete(record)
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/public-link")
+async def enable_public_link(company_id: UUID = Depends(get_effective_company_id), user=Depends(get_hr_or_above), db: AsyncSession = Depends(get_db)):
+    link = (await db.execute(select(CalendarPublicLink).where(CalendarPublicLink.company_id == company_id, CalendarPublicLink.user_id == user.id, CalendarPublicLink.revoked_at.is_(None)).order_by(CalendarPublicLink.created_at.desc()))).scalars().first()
+    if not link:
+        link = CalendarPublicLink(company_id=company_id, user_id=user.id, token=secrets.token_urlsafe(24), enabled=True)
+        db.add(link)
+    else:
+        link.enabled = True
+    await db.commit()
+    await db.refresh(link)
+    return serialize_public_link(link)
+
+
+@router.delete("/public-link", status_code=204)
+async def revoke_public_link(company_id: UUID = Depends(get_effective_company_id), user=Depends(get_hr_or_above), db: AsyncSession = Depends(get_db)):
+    links = (await db.execute(select(CalendarPublicLink).where(CalendarPublicLink.company_id == company_id, CalendarPublicLink.user_id == user.id, CalendarPublicLink.revoked_at.is_(None)))).scalars().all()
+    for link in links:
+        link.enabled = False
+        link.revoked_at = datetime.now(timezone.utc)
+    await db.commit()
+    return Response(status_code=204)
+
+
 @router.get("/interviews")
 async def interviews(start: datetime | None = None, end: datetime | None = None, company_id: UUID = Depends(get_effective_company_id), db: AsyncSession = Depends(get_db)):
     query = select(Interview, Candidate.full_name).outerjoin(Candidate, (Interview.candidate_id == Candidate.id) & (Candidate.company_id == company_id)).where(Interview.company_id == company_id)
@@ -268,7 +417,9 @@ async def interview_calendar(start: datetime, end: datetime, day: datetime, comp
     day_start = datetime.combine(day.date(), time.min, tzinfo=day.tzinfo)
     day_end = day_start + timedelta(days=1)
     day_records = [record for record in records if overlaps(interview_start(record).astimezone(day.tzinfo), interview_end(record).astimezone(day.tzinfo), day_start, day_end)]
-    free = free_slots_for_day(day_records, day)
+    blocks = (await db.execute(select(CalendarBlock).where(CalendarBlock.company_id == company_id, CalendarBlock.starts_at >= start.astimezone(timezone.utc), CalendarBlock.starts_at < end.astimezone(timezone.utc)))).scalars().all()
+    day_blocks = [block for block in blocks if overlaps(block_start(block).astimezone(day.tzinfo), block_end(block).astimezone(day.tzinfo), day_start, day_end)]
+    free = free_slots_for_day(day_records, day, day_blocks)
     best = max(free, key=lambda slot: slot["duration_minutes"], default=None)
     return {
         "meetings": [await serialize_interview(db, record, name, company_id) for record, name in rows],
@@ -329,3 +480,38 @@ async def cancel_interview(record_id: UUID, company_id: UUID = Depends(get_effec
     await db.delete(record)
     await db.commit()
     return Response(status_code=204)
+
+
+@public_router.get("/{token}/slots")
+async def public_slots(token: str, start: datetime, end: datetime, db: AsyncSession = Depends(get_db)):
+    link = await active_public_link(db, token, lock=True)
+    slots = await availability_slots(db, link, start, end)
+    return {"slots": slots}
+
+
+@public_router.post("/{token}/book", status_code=201)
+async def public_book(token: str, data: PublicBookingCreate, db: AsyncSession = Depends(get_db)):
+    link = await active_public_link(db, token)
+    start = data.starts_at.astimezone(timezone.utc)
+    end = start + timedelta(minutes=data.duration_minutes)
+    slots = await availability_slots(db, link, data.starts_at, end.astimezone(data.starts_at.tzinfo))
+    if not any(slot["starts_at"] == data.starts_at and slot["duration_minutes"] == data.duration_minutes for slot in slots):
+        raise HTTPException(409, "Слот уже занят")
+    participant_ids = [link.user_id]
+    await ensure_interview_available(db, link.company_id, None, participant_ids, data.starts_at, data.duration_minutes)
+    record = Interview(
+        company_id=link.company_id,
+        participant_ids=[str(link.user_id)],
+        meeting_type="work",
+        title=f"Запись: {data.visitor_name}",
+        starts_at=start,
+        duration_minutes=data.duration_minutes,
+        notes=data.notes,
+        external_name=data.visitor_name,
+        external_contact=data.visitor_contact,
+        created_by=link.user_id,
+    )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    return {"id": record.id, "starts_at": interview_start(record), "duration_minutes": record.duration_minutes}

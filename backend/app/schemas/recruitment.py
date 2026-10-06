@@ -48,6 +48,8 @@ class InterviewCreate(BaseModel):
     participant_ids: list[UUID] = Field(default_factory=list, max_length=50)
     meeting_url: HttpUrl | None = None
     notes: str | None = Field(default=None, max_length=10000)
+    external_name: str | None = Field(default=None, max_length=255)
+    external_contact: str | None = Field(default=None, max_length=255)
 
 
 class InterviewPatch(BaseModel):
@@ -59,6 +61,33 @@ class InterviewPatch(BaseModel):
     duration_minutes: int | None = Field(default=None, ge=5, le=480)
     participant_ids: list[UUID] | None = Field(default=None, max_length=50)
     meeting_url: HttpUrl | None = None
+    notes: str | None = Field(default=None, max_length=10000)
+    external_name: str | None = Field(default=None, max_length=255)
+    external_contact: str | None = Field(default=None, max_length=255)
+
+
+class AvailabilityRuleIn(BaseModel):
+    weekday: int = Field(ge=0, le=6)
+    start_minute: int = Field(ge=0, le=1439)
+    end_minute: int = Field(ge=1, le=1440)
+    slot_minutes: int = Field(default=30, ge=5, le=240)
+
+
+class AvailabilityRulesUpdate(BaseModel):
+    rules: list[AvailabilityRuleIn] = Field(default_factory=list, max_length=28)
+
+
+class CalendarBlockCreate(BaseModel):
+    starts_at: AwareDatetime
+    duration_minutes: int = Field(default=30, ge=5, le=480)
+    title: str | None = Field(default=None, max_length=300)
+
+
+class PublicBookingCreate(BaseModel):
+    starts_at: AwareDatetime
+    duration_minutes: int = Field(default=30, ge=5, le=240)
+    visitor_name: str = Field(min_length=1, max_length=255)
+    visitor_contact: str = Field(min_length=1, max_length=255)
     notes: str | None = Field(default=None, max_length=10000)
 
 

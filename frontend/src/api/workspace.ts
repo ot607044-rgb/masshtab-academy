@@ -29,6 +29,9 @@ export interface CalendarSummary {
   free_slots: FreeSlot[];
   best_slot: FreeSlot | null;
 }
+export interface AvailabilityRule { id: string; weekday: number; start_minute: number; end_minute: number; slot_minutes: number }
+export interface CalendarBlock { id: string; starts_at: string; duration_minutes: number; title: string | null }
+export interface AvailabilityState { rules: AvailabilityRule[]; blocks: CalendarBlock[]; public_link: { token: string; enabled: boolean } | null }
 export interface Progress {
   employee_id: string; full_name: string; department_name: string | null;
   position_name: string | null; lessons_completed: number; lessons_total: number;
@@ -71,6 +74,14 @@ export const getMeetingParticipants = () => client.get<CalendarParticipant[]>("/
 export const createInterview = (data: Omit<Interview, "id" | "candidate_name" | "participants">) => client.post<Interview>("/api/v1/recruitment/interviews", data).then(r => r.data);
 export const updateInterview = (id: string, data: Partial<Omit<Interview, "id" | "candidate_name" | "participants">>) => client.patch<Interview>(`/api/v1/recruitment/interviews/${id}`, data).then(r => r.data);
 export const cancelInterview = (id: string) => client.delete(`/api/v1/recruitment/interviews/${id}`);
+export const getAvailability = () => client.get<AvailabilityState>("/api/v1/recruitment/availability").then(r => r.data);
+export const updateAvailabilityRules = (rules: Omit<AvailabilityRule, "id">[]) => client.put<{ rules: AvailabilityRule[] }>("/api/v1/recruitment/availability/rules", { rules }).then(r => r.data);
+export const createCalendarBlock = (data: { starts_at: string; duration_minutes: number; title: string | null }) => client.post<CalendarBlock>("/api/v1/recruitment/availability/blocks", data).then(r => r.data);
+export const deleteCalendarBlock = (id: string) => client.delete(`/api/v1/recruitment/availability/blocks/${id}`);
+export const enablePublicCalendarLink = () => client.post<{ token: string; enabled: boolean }>("/api/v1/recruitment/public-link").then(r => r.data);
+export const revokePublicCalendarLink = () => client.delete("/api/v1/recruitment/public-link");
+export const getPublicSlots = (token: string, start: string, end: string) => client.get<{ slots: FreeSlot[] }>(`/api/v1/public-calendar/${token}/slots`, { params: { start, end } }).then(r => r.data);
+export const bookPublicSlot = (token: string, data: { starts_at: string; duration_minutes: number; visitor_name: string; visitor_contact: string; notes: string | null }) => client.post(`/api/v1/public-calendar/${token}/book`, data).then(r => r.data);
 
 export function apiError(error: unknown): string {
   const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
