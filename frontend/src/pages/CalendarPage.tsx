@@ -7,6 +7,13 @@ const dayKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() +
 const minutes = (date: Date) => date.getHours() * 60 + date.getMinutes();
 const timeLabel = (value: string | Date) => new Date(value).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const localInputValue = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+const localIso = (date: Date) => {
+  const offset = -date.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const abs = Math.abs(offset);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+  return `${local}${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+};
 const MEETING_TYPES: Record<Interview["meeting_type"], string> = { interview: "Собеседование", work: "Рабочая встреча", planning: "Планёрка", other: "Другое" };
 const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
@@ -214,7 +221,7 @@ export default function CalendarPage() {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const next = new Date(start); next.setDate(next.getDate() + i); return next; }), [start]);
 
   const reload = useCallback(async () => {
-    const [calendar, people, participantList, availabilityState] = await Promise.all([getInterviewCalendar(start.toISOString(), end.toISOString(), date.toISOString()), getCandidates(), getMeetingParticipants(), getAvailability()]);
+    const [calendar, people, participantList, availabilityState] = await Promise.all([getInterviewCalendar(localIso(start), localIso(end), localIso(date)), getCandidates(), getMeetingParticipants(), getAvailability()]);
     setSummary(calendar);
     setCandidates(people);
     setParticipants(participantList);

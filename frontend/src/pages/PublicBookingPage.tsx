@@ -5,6 +5,13 @@ import { bookPublicSlot, getPublicSlots, type FreeSlot } from "../api/workspace"
 import { Empty, LoadState } from "../components/AcademyUI";
 
 const timeLabel = (value: string) => new Date(value).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+const localIso = (date: Date) => {
+  const offset = -date.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const abs = Math.abs(offset);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+  return `${local}${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+};
 
 export default function PublicBookingPage() {
   const { token = "" } = useParams();
@@ -20,7 +27,7 @@ export default function PublicBookingPage() {
     const start = new Date();
     const end = new Date(); end.setDate(end.getDate() + 14);
     try {
-      const result = await getPublicSlots(token, start.toISOString(), end.toISOString());
+      const result = await getPublicSlots(token, localIso(start), localIso(end));
       setSlots(result.slots);
       setSelected(result.slots[0] ?? null);
     } catch {
