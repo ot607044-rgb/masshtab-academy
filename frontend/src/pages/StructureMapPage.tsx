@@ -1,23 +1,36 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Building2, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from "../api/departments";
 import { getPositions, createPosition } from "../api/positions";
 import { getEmployees } from "../api/employees";
 import { getCompany } from "../api/companies";
 import type { Department, Employee, Position } from "../types";
+import { EMPLOYEE_STATUS_LABELS } from "../types";
 import { useAuth } from "../context/AuthContext";
 import CreateModal from "../components/CreateModal";
 import page from "./PageContent.module.css";
-import styles from "./StructureMap.module.css";
+import s from "./StructureMap.module.css";
 
-const ACCENTS = ["#8c7ae6", "#e7a35c", "#6fa3d8", "#5fb08a", "#d784a6", "#9aa5b1"];
+const TONES = ["blue", "sand", "green", "rose", "purple", "slate"] as const;
+const NO_POSITION = "__none__";
 
 type Draft = { kind: "department" | "position"; parentId: string | null };
+type Selection = { kind: "department" | "position" | "employee"; id: string } | null;
 
 const apiError = (err: unknown, fallback: string) => {
   const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
   return typeof msg === "string" ? msg : fallback;
 };
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
+const plural = (n: number, one: string, few: string, many: string) => {
+  const m10 = n % 10, m100 = n % 100;
+  return `${n} ${m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many}`;
+};
+const people = (n: number) => plural(n, "сотрудник", "сотрудника", "сотрудников");
+const roles = (n: number) => plural(n, "должность", "должности", "должностей");
+const units = (n: number) => plural(n, "отдел", "отдела", "отделов");
+const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, "ru");
 
 const InlineForm: React.FC<{ label: string; placeholder: string; onSubmit: (name: string) => Promise<void>; onCancel: () => void }> = ({ label, placeholder, onSubmit, onCancel }) => {
   const [name, setName] = useState("");
@@ -30,20 +43,29 @@ const InlineForm: React.FC<{ label: string; placeholder: string; onSubmit: (name
     try { await onSubmit(name.trim()); } catch (err) { setError(apiError(err, "Не удалось сохранить")); setSaving(false); }
   };
   return (
-    <form className={styles.inlineForm} onSubmit={submit} onKeyDown={(e) => e.key === "Escape" && onCancel()}>
+    <form className={s.inlineForm} onSubmit={submit} onKeyDown={(e) => e.key === "Escape" && onCancel()}>
       <input aria-label={label} placeholder={placeholder} value={name} maxLength={255} autoFocus disabled={saving}
         onChange={(e) => { setName(e.target.value); setError(""); }} />
-      {error && <p className={styles.formError}>{error}</p>}
-      <div className={styles.formActions}>
-        <button type="button" className="btn-secondary" onClick={onCancel} disabled={saving}>Отмена</button>
-        <button type="submit" className="btn-primary" disabled={saving}>Создать</button>
+      {error && <p className={s.formError}>{error}</p>}
+      <div className={s.formActions}>
+        <button type="button" className={s.button} onClick={onCancel} disabled={saving}>Отмена</button>
+        <button type="submit" className={`${s.button} ${s.primary}`} disabled={saving}>Создать</button>
       </div>
     </form>
   );
 };
 
+const PersonNode: React.FC<{ title: string; name: string; tone: string; selected: boolean; compact?: boolean; onSelect: () => void }> = ({ title, name, tone, selected, compact, onSelect }) => (
+  <button type="button" className={`${s.personNode} ${compact ? s.compact : ""} ${selected ? s.selected : ""}`} onClick={onSelect} aria-pressed={selected}>
+    <span className={`${s.avatar} ${s[`tone_${tone}`]}`}>{initials(name)}</span>
+    <span className={s.personCopy}><strong>{title}</strong><small>{name}</small></span>
+    {!compact && <ChevronRight size={15} aria-hidden="true" />}
+  </button>
+);
+
 const StructureMapPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const canEdit = user?.role === "company_admin" || user?.role === "hr";
 
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -53,6 +75,11 @@ const StructureMapPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [editing, setEditing] = useState<Department | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [openRoles, setOpenRoles] = useState<Set<string>>(new Set());
+  const [selection, setSelection] = useState<Selection>(null);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const newColumnRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,22 +91,81 @@ const StructureMapPage: React.FC = () => {
     ]).finally(() => setLoading(false));
   }, [user?.company_id]);
 
-  const byName = (a: Department, b: Department) => a.name.localeCompare(b.name, "ru");
-  const ids = useMemo(() => new Set(departments.map((d) => d.id)), [departments]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // ── Structure helpers (real CRM data) ────────────────────────────────────────
+  const deptById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
+  const posById = useMemo(() => new Map(positions.map((p) => [p.id, p])), [positions]);
+  const empById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const childrenOf = (id: string | null) =>
-    departments.filter((d) => (id === null ? !d.parent_id || !ids.has(d.parent_id) : d.parent_id === id)).sort(byName);
+    departments.filter((d) => (id === null ? !d.parent_id || !deptById.has(d.parent_id) : d.parent_id === id)).sort(byName);
   const descendants = (id: string): string[] => childrenOf(id).flatMap((c) => [c.id, ...descendants(c.id)]);
   const peopleIn = (id: string) => {
     const scope = new Set([id, ...descendants(id)]);
     return employees.filter((e) => e.department_id && scope.has(e.department_id)).length;
   };
-  const headName = (id: string | null) => (id ? employees.find((e) => e.id === id)?.full_name ?? null : null);
+  const positionsOf = (deptId: string) => positions.filter((p) => p.department_id === deptId).sort(byName);
+  const holders = (posId: string) => employees.filter((e) => e.position_id === posId).sort((a, b) => a.full_name.localeCompare(b.full_name, "ru"));
+  const unpositioned = (deptId: string) => employees.filter((e) => e.department_id === deptId && (!e.position_id || !posById.has(e.position_id)));
+  const titleOf = (e: Employee) => (e.position_id && posById.get(e.position_id)?.name) || "Должность не указана";
+  const deptPath = (id: string | null): string => {
+    const names: string[] = [];
+    for (let d = id ? deptById.get(id) : undefined; d && names.length < 20; d = d.parent_id ? deptById.get(d.parent_id) : undefined) names.unshift(d.name);
+    return names.join(" · ");
+  };
   const roots = childrenOf(null);
+  // Nearest department head up the chain (a subdepartment without a head reports to its parent's head).
+  const headFor = (deptId: string | null, exclude?: string) => {
+    for (let d = deptId ? deptById.get(deptId) : undefined, i = 0; d && i < 20; d = d.parent_id ? deptById.get(d.parent_id) : undefined, i++) {
+      if (d.head_id && d.head_id !== exclude && empById.has(d.head_id)) return empById.get(d.head_id);
+    }
+    return undefined;
+  };
+  const toneOf = useMemo(() => {
+    const map = new Map<string, string>();
+    const top = (id: string) => { let d = deptById.get(id); for (let i = 0; d?.parent_id && deptById.has(d.parent_id) && i < 20; i++) d = deptById.get(d.parent_id); return d?.id; };
+    const rootIds = departments.filter((d) => !d.parent_id || !deptById.has(d.parent_id)).sort(byName).map((d) => d.id);
+    departments.forEach((d) => { const r = top(d.id); map.set(d.id, TONES[Math.max(0, rootIds.indexOf(r ?? "")) % TONES.length]); });
+    return (deptId: string | null) => (deptId && map.get(deptId)) || "slate";
+  }, [departments, deptById]);
 
+  // ── Search ───────────────────────────────────────────────────────────────────
+  const q = query.trim().toLocaleLowerCase("ru");
+  const hit = (text: string | null | undefined) => !!q && !!text && text.toLocaleLowerCase("ru").includes(q);
+  const matches = useMemo(() => {
+    if (!q) return null;
+    const depts = new Set<string>(), full = new Set<string>(), roleIds = new Set<string>(), emps = new Set<string>();
+    const mark = (id: string | null) => { for (let d = id ? deptById.get(id) : undefined; d && !depts.has(d.id); d = d.parent_id ? deptById.get(d.parent_id) : undefined) depts.add(d.id); };
+    departments.forEach((d) => { if (hit(d.name)) { mark(d.id); [d.id, ...descendants(d.id)].forEach((c) => { depts.add(c); full.add(c); }); } });
+    positions.forEach((p) => { if (hit(p.name)) { roleIds.add(p.id); mark(p.department_id); } });
+    employees.forEach((e) => {
+      if (!hit(e.full_name) && !hit(e.email)) return;
+      emps.add(e.id);
+      roleIds.add(e.position_id && posById.has(e.position_id) ? e.position_id : `${NO_POSITION}:${e.department_id}`);
+      mark(e.department_id ?? (e.position_id ? posById.get(e.position_id)?.department_id ?? null : null));
+    });
+    return { depts, full, roleIds, emps };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, departments, positions, employees]);
+  const deptVisible = (id: string) => !matches || matches.depts.has(id);
+  const deptOpen = (id: string) => (matches ? true : !collapsed.has(id));
+
+  const toggle = (set: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) =>
+    set((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const allCollapsed = roots.length > 0 && roots.every((r) => collapsed.has(r.id));
+
+  // ── Mutations (existing API) ─────────────────────────────────────────────────
   const addDepartment = async (name: string, parentId: string | null) => {
     const saved: Department = await createDepartment({ name, parent_id: parentId });
     setDepartments((prev) => [...prev, saved]);
     setDraft(null);
+    setSelection({ kind: "department", id: saved.id });
   };
   const addPosition = async (name: string, departmentId: string) => {
     const saved: Position = await createPosition({ name, department_id: departmentId });
@@ -90,6 +176,7 @@ const StructureMapPage: React.FC = () => {
     if (!confirm(`Удалить отдел «${dept.name}»? Его подотделы перейдут на уровень выше.`)) return;
     await deleteDepartment(dept.id);
     setDepartments(await getDepartments());
+    if (selection?.id === dept.id) setSelection(null);
   };
   const saveEdit = async (form: Record<string, string>) => {
     if (!editing) return;
@@ -102,57 +189,254 @@ const StructureMapPage: React.FC = () => {
     setEditing(null);
   };
   const startNewDepartment = () => {
+    setQuery("");
     setDraft({ kind: "department", parentId: null });
     requestAnimationFrame(() => newColumnRef.current?.scrollIntoView({ behavior: "smooth", inline: "end", block: "nearest" }));
   };
-
   const isDraft = (kind: Draft["kind"], parentId: string | null) => draft?.kind === kind && draft.parentId === parentId;
+  const isSel = (kind: NonNullable<Selection>["kind"], id: string) => selection?.kind === kind && selection.id === id;
 
-  const renderDepartment = (dept: Department, depth: number): React.ReactNode => {
-    const deptPositions = positions.filter((p) => p.department_id === dept.id).sort((a, b) => a.name.localeCompare(b.name, "ru"));
-    const head = headName(dept.head_id);
-    const Heading = depth === 0 ? "h3" : "h4";
+  // ── Rendering ────────────────────────────────────────────────────────────────
+  const tools = (dept: Department) => canEdit && (
+    <span className={s.cardTools}>
+      <button type="button" className={s.iconBtn} onClick={(e) => { e.stopPropagation(); setEditing(dept); }} aria-label={`Редактировать отдел ${dept.name}`} title="Редактировать">
+        <Pencil size={14} aria-hidden="true" />
+      </button>
+      <button type="button" className={s.iconBtn} onClick={(e) => { e.stopPropagation(); remove(dept); }} aria-label={`Удалить отдел ${dept.name}`} title="Удалить">
+        <Trash2 size={14} aria-hidden="true" />
+      </button>
+    </span>
+  );
+
+  const renderRole = (key: string, name: string, staff: Employee[], deptId: string, position?: Position) => {
+    if (matches && !matches.full.has(deptId) && !matches.roleIds.has(key)) return null;
+    const showAll = !matches || matches.full.has(deptId) || hit(name);
+    const shown = showAll ? staff : staff.filter((e) => matches!.emps.has(e.id));
+    const open = openRoles.has(key) || (!!matches && staff.some((e) => matches.emps.has(e.id)));
     return (
-      <div key={dept.id} className={depth === 0 ? styles.branch : styles.subBranch}>
-        <div className={depth === 0 ? styles.deptCard : styles.subCard}>
-          <div className={styles.cardTop}>
-            <Heading className={styles.deptName}>{dept.name}</Heading>
-            <span className={page.countBadge}>{peopleIn(dept.id)} чел.</span>
-          </div>
-          <p className={styles.head}>Руководитель: <strong>{head ?? "—"}</strong></p>
-          {canEdit && (
-            <div className={styles.cardTools}>
-              <button type="button" className={styles.iconBtn} onClick={() => setEditing(dept)} aria-label={`Редактировать отдел ${dept.name}`} title="Редактировать">
-                <Pencil size={15} aria-hidden="true" />
-              </button>
-              <button type="button" className={styles.iconBtn} onClick={() => remove(dept)} aria-label={`Удалить отдел ${dept.name}`} title="Удалить">
-                <Trash2 size={15} aria-hidden="true" />
-              </button>
-            </div>
-          )}
+      <li key={key} className={s.roleBranch}>
+        <div className={`${s.roleNode} ${position && isSel("position", position.id) ? s.roleSelected : ""} ${hit(name) ? s.hit : ""}`}>
+          <button type="button" className={s.disclosure} aria-expanded={open} aria-label={`${open ? "Скрыть" : "Показать"} сотрудников: ${name}`}
+            onClick={() => toggle(setOpenRoles, key)} disabled={staff.length === 0}>
+            <ChevronRight size={14} aria-hidden="true" className={open ? s.rotated : ""} />
+          </button>
+          <button type="button" className={s.roleBody} onClick={() => position ? setSelection({ kind: "position", id: position.id }) : toggle(setOpenRoles, key)}>
+            <span className={s.roleName}>{name}</span>
+            <small className={s.posCount}>{staff.length ? people(staff.length) : "вакансия"}</small>
+          </button>
         </div>
-
-        {deptPositions.length > 0 && (
-          <ul className={styles.positions} aria-label={`Должности: ${dept.name}`}>
-            {deptPositions.map((p) => (
-              <li key={p.id}><span>{p.name}</span><span className={styles.posCount}>{employees.filter((e) => e.position_id === p.id).length}</span></li>
+        {open && staff.length > 0 && (
+          <ul className={s.employees}>
+            {shown.map((e) => (
+              <li key={e.id} className={s.employeeNode}>
+                <PersonNode compact title={titleOf(e)} name={e.full_name} tone={toneOf(deptId)} selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} />
+              </li>
             ))}
           </ul>
         )}
+      </li>
+    );
+  };
 
-        {childrenOf(dept.id).map((child) => renderDepartment(child, depth + 1))}
-
-        {canEdit && (isDraft("position", dept.id) ? (
+  const renderContents = (dept: Department, depth: number): React.ReactNode => {
+    const deptPositions = positionsOf(dept.id);
+    const loose = unpositioned(dept.id);
+    const rolesList = [
+      ...deptPositions.map((p) => renderRole(p.id, p.name, holders(p.id), dept.id, p)),
+      loose.length > 0 ? renderRole(`${NO_POSITION}:${dept.id}`, "Без должности", loose, dept.id) : null,
+    ].filter(Boolean);
+    return (
+      <>
+        {rolesList.length > 0 && <ul className={s.roles} aria-label={`Должности: ${dept.name}`}>{rolesList}</ul>}
+        {childrenOf(dept.id).filter((c) => deptVisible(c.id)).map((child) => renderUnit(child, depth + 1))}
+        {canEdit && !matches && (isDraft("position", dept.id) ? (
           <InlineForm label={`Новая должность в отделе ${dept.name}`} placeholder="Название должности" onSubmit={(n) => addPosition(n, dept.id)} onCancel={() => setDraft(null)} />
         ) : isDraft("department", dept.id) ? (
           <InlineForm label={`Новый подотдел в отделе ${dept.name}`} placeholder="Название подотдела" onSubmit={(n) => addDepartment(n, dept.id)} onCancel={() => setDraft(null)} />
         ) : (
-          <div className={styles.addRow}>
-            <button type="button" className={styles.addBtn} onClick={() => setDraft({ kind: "position", parentId: dept.id })} aria-label={`Добавить должность в отдел ${dept.name}`}><Plus size={14} aria-hidden="true" /> должность</button>
-            <button type="button" className={styles.addBtn} onClick={() => setDraft({ kind: "department", parentId: dept.id })} aria-label={`Добавить подотдел в отдел ${dept.name}`}><Plus size={14} aria-hidden="true" /> подотдел</button>
+          <div className={s.addRow}>
+            <button type="button" className={s.addBtn} onClick={() => setDraft({ kind: "position", parentId: dept.id })} aria-label={`Добавить должность в отдел ${dept.name}`}><Plus size={13} aria-hidden="true" /> должность</button>
+            <button type="button" className={s.addBtn} onClick={() => setDraft({ kind: "department", parentId: dept.id })} aria-label={`Добавить подотдел в отдел ${dept.name}`}><Plus size={13} aria-hidden="true" /> подотдел</button>
           </div>
         ))}
+      </>
+    );
+  };
+
+  const renderUnit = (dept: Department, depth: number): React.ReactNode => {
+    const open = deptOpen(dept.id);
+    const Heading = depth <= 1 ? "h4" : "h5";
+    return (
+      <div key={dept.id} className={s.unitBranch}>
+        <div className={`${s.unitNode} ${isSel("department", dept.id) ? s.unitSelected : ""} ${hit(dept.name) ? s.hit : ""}`}>
+          <button type="button" className={s.disclosure} aria-expanded={open} aria-label={`${open ? "Свернуть" : "Раскрыть"} отдел ${dept.name}`} onClick={() => toggle(setCollapsed, dept.id)}>
+            <ChevronRight size={14} aria-hidden="true" className={open ? s.rotated : ""} />
+          </button>
+          <button type="button" className={s.unitBody} onClick={() => setSelection({ kind: "department", id: dept.id })}>
+            <span className={s.unitIcon}><Building2 size={16} aria-hidden="true" /></span>
+            <span className={s.unitCopy}>
+              <Heading className={s.unitName}>{dept.name}</Heading>
+              <small>{roles(positionsOf(dept.id).length)} · {peopleIn(dept.id)} чел.</small>
+            </span>
+          </button>
+          {tools(dept)}
+        </div>
+        {open && <div className={s.unitContent}>{renderContents(dept, depth)}</div>}
       </div>
+    );
+  };
+
+  const renderBranch = (dept: Department) => {
+    const open = deptOpen(dept.id);
+    const head = dept.head_id ? empById.get(dept.head_id) : undefined;
+    const subCount = descendants(dept.id).length;
+    return (
+      <div key={dept.id} className={`${s.leaderBranch} ${open ? s.expanded : ""}`}>
+        <div className={`${s.leaderCard} ${isSel("department", dept.id) ? s.cardSelected : ""}`}>
+          <div className={`${s.departmentTitle} ${hit(dept.name) ? s.hit : ""}`}>
+            <button type="button" className={s.titleBtn} onClick={() => setSelection({ kind: "department", id: dept.id })}>
+              <span>Отдел</span>
+              <h3 className={s.deptName}>{dept.name}</h3>
+            </button>
+            {tools(dept)}
+          </div>
+          {head ? (
+            <PersonNode title={titleOf(head)} name={head.full_name} tone={toneOf(dept.id)} selected={isSel("employee", head.id)} onSelect={() => setSelection({ kind: "employee", id: head.id })} />
+          ) : (
+            <div className={s.noHead}>Руководитель не назначен</div>
+          )}
+          <div className={s.leaderMeta}>
+            <span>{roles(positionsOf(dept.id).length)}{subCount ? ` · ${units(subCount)}` : ""} · <b>{peopleIn(dept.id)} чел.</b></span>
+            <button type="button" aria-expanded={open} aria-label={`${open ? "Свернуть" : "Раскрыть"} ветку ${dept.name}`} onClick={() => toggle(setCollapsed, dept.id)}>
+              <ChevronRight size={15} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div className={s.branchContent}>
+          {open ? renderContents(dept, 0) : (
+            <button type="button" className={s.collapsedSummary} onClick={() => toggle(setCollapsed, dept.id)}>
+              <Building2 size={16} aria-hidden="true" />
+              <span><strong>{roles(positionsOf(dept.id).length)}{subCount ? ` · ${units(subCount)}` : ""}</strong><small>{people(peopleIn(dept.id))}</small></span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Inspector ────────────────────────────────────────────────────────────────
+  const fallback = roots[0] ? { kind: "department" as const, id: roots[0].id } : null;
+  const current = selection && (selection.kind === "department" ? deptById.has(selection.id) : selection.kind === "position" ? posById.has(selection.id) : empById.has(selection.id)) ? selection : fallback;
+
+  const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <div className={s.relationRow}><span>{label}</span><strong>{children}</strong></div>
+  );
+  const PersonLink = ({ e }: { e?: Employee }) => e
+    ? <button type="button" className={s.linkBtn} onClick={() => setSelection({ kind: "employee", id: e.id })}>{e.full_name}</button>
+    : <>—</>;
+
+  const renderInspector = () => {
+    if (!current) return <div className={s.inspectorEmpty}>Выберите отдел, должность или сотрудника на схеме.</div>;
+    if (current.kind === "department") {
+      const d = deptById.get(current.id)!;
+      const head = d.head_id ? empById.get(d.head_id) : undefined;
+      const parent = d.parent_id ? deptById.get(d.parent_id) : undefined;
+      const subs = childrenOf(d.id);
+      const deptPositions = positionsOf(d.id);
+      return (
+        <>
+          <div className={s.inspectorHead}><span>Карточка отдела</span></div>
+          <div className={s.hero}>
+            <span className={`${s.avatar} ${s.avatarLarge} ${s[`tone_${toneOf(d.id)}`]}`}><Building2 size={22} aria-hidden="true" /></span>
+            <div><strong className={s.heroTitle}>{d.name}</strong><p>{parent ? `Входит в «${parent.name}»` : companyName}</p></div>
+            {canEdit && <button type="button" className={s.editButton} onClick={() => setEditing(d)} aria-label={`Изменить отдел ${d.name}`} title="Редактировать"><Pencil size={15} aria-hidden="true" /></button>}
+          </div>
+          <div className={s.section}>
+            <span className={s.detailLabel}>Место в структуре</span>
+            <Row label="Руководитель"><PersonLink e={head} /></Row>
+            <Row label="Вышестоящий">{parent ? <button type="button" className={s.linkBtn} onClick={() => setSelection({ kind: "department", id: parent.id })}>{parent.name}</button> : companyName}</Row>
+            <Row label="Подотделы">{subs.length ? subs.map((c) => c.name).join(", ") : "Нет"}</Row>
+            <Row label="Численность">{people(peopleIn(d.id))}</Row>
+          </div>
+          {d.description && <div className={s.section}><span className={s.detailLabel}>Описание</span><p className={s.text}>{d.description}</p></div>}
+          <div className={s.section}>
+            <span className={s.detailLabel}>Должности · {deptPositions.length}</span>
+            {deptPositions.length ? (
+              <ul className={s.questions}>
+                {deptPositions.map((p) => (
+                  <li key={p.id}><button type="button" className={s.linkBtn} onClick={() => setSelection({ kind: "position", id: p.id })}>{p.name}</button><small>{holders(p.id).length}</small></li>
+                ))}
+              </ul>
+            ) : <p className={s.muted}>Должности ещё не добавлены</p>}
+          </div>
+        </>
+      );
+    }
+    if (current.kind === "position") {
+      const p = posById.get(current.id)!;
+      const d = p.department_id ? deptById.get(p.department_id) : undefined;
+      const staff = holders(p.id);
+      const head = headFor(p.department_id);
+      return (
+        <>
+          <div className={s.inspectorHead}><span>Карточка должности</span></div>
+          <div className={s.hero}>
+            <span className={`${s.avatar} ${s.avatarLarge} ${s[`tone_${toneOf(p.department_id)}`]}`}>{initials(p.name)}</span>
+            <div><strong className={s.heroTitle}>{p.name}</strong><p>{d ? deptPath(d.id) : "Отдел не указан"}</p></div>
+          </div>
+          <div className={s.section}>
+            <span className={s.detailLabel}>Место в структуре</span>
+            <Row label="Подразделение">{d ? <button type="button" className={s.linkBtn} onClick={() => setSelection({ kind: "department", id: d.id })}>{d.name}</button> : "—"}</Row>
+            <Row label="Руководитель"><PersonLink e={head} /></Row>
+            <Row label="Занято">{staff.length ? people(staff.length) : "Вакансия"}</Row>
+          </div>
+          {(p.required_skills?.length ?? 0) > 0 && (
+            <div className={s.section}><span className={s.detailLabel}>Ключевые навыки</span><div className={s.tags}>{p.required_skills!.map((k) => <span key={k}>{k}</span>)}</div></div>
+          )}
+          {p.description && <div className={s.section}><span className={s.detailLabel}>Зона ответственности</span><p className={s.text}>{p.description}</p></div>}
+          <div className={s.section}>
+            <span className={s.detailLabel}>Сотрудники</span>
+            {staff.length ? (
+              <div className={s.stack}>{staff.map((e) => <PersonNode key={e.id} compact title={titleOf(e)} name={e.full_name} tone={toneOf(p.department_id)} selected={false} onSelect={() => setSelection({ kind: "employee", id: e.id })} />)}</div>
+            ) : <p className={s.muted}>На должность пока никто не назначен</p>}
+          </div>
+        </>
+      );
+    }
+    const e = empById.get(current.id)!;
+    const pos = e.position_id ? posById.get(e.position_id) : undefined;
+    const d = e.department_id ? deptById.get(e.department_id) : undefined;
+    const manager = (e.manager_id ? empById.get(e.manager_id) : undefined) ?? headFor(e.department_id, e.id);
+    const headed = departments.filter((x) => x.head_id === e.id);
+    const reports = employees.filter((x) => x.manager_id === e.id).length;
+    return (
+      <>
+        <div className={s.inspectorHead}><span>Карточка сотрудника</span></div>
+        <div className={s.hero}>
+          <span className={`${s.avatar} ${s.avatarLarge} ${s[`tone_${toneOf(e.department_id)}`]}`}>{initials(e.full_name)}</span>
+          <div><strong className={s.heroTitle}>{titleOf(e)}</strong><p>{e.full_name}</p></div>
+          {canEdit && <button type="button" className={s.editButton} onClick={() => navigate(`/dashboard/employees/${e.id}`)} aria-label={`Редактировать сотрудника ${e.full_name}`} title="Редактировать"><Pencil size={15} aria-hidden="true" /></button>}
+        </div>
+        <div className={s.section}>
+          <span className={s.detailLabel}>Место в структуре</span>
+          <Row label="Руководитель"><PersonLink e={manager} /></Row>
+          <Row label="Подчинённые">{headed.length ? `Руководит: ${headed.map((x) => x.name).join(", ")}` : reports ? people(reports) : "Нет прямых подчинённых"}</Row>
+          <Row label="Подразделение">{d ? deptPath(d.id) : "—"}</Row>
+          {e.status && <Row label="Статус">{EMPLOYEE_STATUS_LABELS[e.status] ?? e.status}</Row>}
+        </div>
+        {(pos?.required_skills?.length ?? 0) > 0 && (
+          <div className={s.section}><span className={s.detailLabel}>Зона ответственности</span><div className={s.tags}>{pos!.required_skills!.map((k) => <span key={k}>{k}</span>)}</div></div>
+        )}
+        {pos?.description && <div className={s.section}><span className={s.detailLabel}>Обращайтесь по вопросам</span><p className={s.text}>{pos.description}</p></div>}
+        {(e.email || e.phone) && (
+          <div className={s.section}>
+            <span className={s.detailLabel}>Контакты</span>
+            {e.email && <Row label="Email"><a href={`mailto:${e.email}`}>{e.email}</a></Row>}
+            {e.phone && <Row label="Телефон"><a href={`tel:${e.phone}`}>{e.phone}</a></Row>}
+          </div>
+        )}
+        <button type="button" className={`${s.button} ${s.fullWidth}`} onClick={() => navigate(`/dashboard/employees/${e.id}`)}>Открыть полный профиль</button>
+      </>
     );
   };
 
@@ -160,52 +444,80 @@ const StructureMapPage: React.FC = () => {
     { value: "", label: "— верхний уровень —" },
     ...departments.filter((d) => d.id !== editing.id && !descendants(editing.id).includes(d.id)).sort(byName).map((d) => ({ value: d.id, label: d.name })),
   ] : [];
+  const visibleRoots = roots.filter((r) => deptVisible(r.id));
 
   return (
-    <div className={page.page}>
-      <div className={page.pageHeader}>
+    <div className={`${page.page} ${s.module}`}>
+      <header className={s.pageHeader}>
         <div>
-          <h1 className={page.title}>Карта структуры</h1>
-          <p className={page.subtitle}>{departments.length} отделов · {positions.length} должностей · {employees.length} сотрудников</p>
+          <p className={s.eyebrow}>Команда</p>
+          <h1 className={s.title}>Структура компании</h1>
+          <p className={s.subtitle}>Карта подчинения и зон ответственности · {units(departments.length)} · {roles(positions.length)} · {people(employees.length)}</p>
         </div>
         {canEdit && (
-          <button className="btn-primary" onClick={startNewDepartment}>
-            <Plus size={16} aria-hidden="true" /> Отдел
+          <button type="button" className={`${s.button} ${s.primary}`} onClick={startNewDepartment}>
+            <Plus size={16} aria-hidden="true" /> Добавить отдел
           </button>
         )}
-      </div>
+      </header>
 
       {loading ? (
         <div className={page.loading}>Загрузка...</div>
       ) : (
-        <div className={styles.map}>
-          <div className={styles.tree}>
-          <div className={styles.root}>
-            <strong>{companyName}</strong>
-            <span>{roots.length} отделов верхнего уровня</span>
+        <>
+          <div className={s.toolbar}>
+            <label className={s.search}>
+              <Search size={17} aria-hidden="true" />
+              <input ref={searchRef} type="search" aria-label="Поиск по структуре" placeholder="Найти отдел, должность или сотрудника" value={query} onChange={(e) => setQuery(e.target.value)} />
+              <span className={s.shortcut}>Ctrl K</span>
+            </label>
+            <span className={s.structureKey}><i /> линия прямого подчинения</span>
+            <button type="button" className={s.button} disabled={!!matches} onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(departments.map((d) => d.id)))}>
+              {allCollapsed ? "Раскрыть ветки" : "Свернуть ветки"}
+            </button>
           </div>
-          <div className={styles.columns}>
-            {roots.map((dept, i) => (
-              <div key={dept.id} className={styles.column} style={{ "--branch": ACCENTS[i % ACCENTS.length] } as React.CSSProperties}>
-                {renderDepartment(dept, 0)}
+
+          <div className={s.workspace}>
+            <section className={s.canvas} aria-label="Оргструктура">
+              <div className={s.canvasHead}>
+                <div><strong>{companyName}</strong><span>{people(employees.length)} · {units(departments.length)}</span></div>
               </div>
-            ))}
-            {canEdit && (
-              <div className={`${styles.column} ${styles.newColumn}`} ref={newColumnRef}>
-                {isDraft("department", null) ? (
-                  <InlineForm label="Новый отдел" placeholder="Название отдела" onSubmit={(n) => addDepartment(n, null)} onCancel={() => setDraft(null)} />
-                ) : (
-                  <button type="button" className={styles.newDept} onClick={() => setDraft({ kind: "department", parentId: null })}>
-                    <span className={styles.plus}><Plus size={16} aria-hidden="true" /></span>
-                    Новый отдел
-                  </button>
-                )}
+
+              <div className={s.scroller}>
+                <div className={s.orgTree}>
+                  <div className={s.rootNode}>
+                    <span className={s.levelLabel}>Компания</span>
+                    <div className={s.companyNode}>
+                      <span className={s.companySymbol}><Building2 size={18} aria-hidden="true" /></span>
+                      <span><small>Компания</small><strong>{companyName}</strong></span>
+                      <em>{units(roots.length)} верхнего уровня</em>
+                    </div>
+                  </div>
+
+                  <div className={s.leadersGrid}>
+                    {visibleRoots.map(renderBranch)}
+                    {canEdit && !matches && (
+                      <div className={`${s.leaderBranch} ${s.newBranch}`} ref={newColumnRef}>
+                        {isDraft("department", null) ? (
+                          <InlineForm label="Новый отдел" placeholder="Название отдела" onSubmit={(n) => addDepartment(n, null)} onCancel={() => setDraft(null)} />
+                        ) : (
+                          <button type="button" className={s.newDept} onClick={() => setDraft({ kind: "department", parentId: null })}>
+                            <span className={s.plus}><Plus size={16} aria-hidden="true" /></span>
+                            Новый отдел
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {roots.length === 0 && !canEdit && <div className={s.empty}>Отделов пока нет.</div>}
+                  {matches && visibleRoots.length === 0 && <div className={s.empty}>Ничего не найдено по запросу «{query.trim()}».</div>}
+                </div>
               </div>
-            )}
-            {roots.length === 0 && !canEdit && <div className={page.emptyWide}>Отделов пока нет.</div>}
+            </section>
+
+            <aside className={s.inspector} aria-label="Информационная карточка">{renderInspector()}</aside>
           </div>
-          </div>
-        </div>
+        </>
       )}
 
       {editing && (

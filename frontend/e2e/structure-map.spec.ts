@@ -33,8 +33,8 @@ test.beforeEach(async ({ page }) => {
 
 test("structure map shows nesting and creates departments and positions in place", async ({ page }) => {
   await page.goto("/dashboard/organization");
-  await expect(page.getByRole("tab", { name: "Карта", exact: true })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("Отчет", { exact: true })).toBeVisible({ timeout: 2500 });
+  await expect(page.getByRole("tab", { name: "Оргструктура", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Отчет", { exact: true }).first()).toBeVisible({ timeout: 2500 });
   await expect(page.getByRole("heading", { name: "Производство", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Отдел ГБ", exact: true })).toBeVisible();
   await expect(page.getByText("2 чел.", { exact: true })).toBeVisible();
@@ -78,4 +78,29 @@ test("structure map edit dialog can move a department to another parent", async 
   await expect(dialog).not.toBeVisible();
   expect(patched).toMatchObject({ parent_id: null });
   await expect(page.getByRole("heading", { name: "Отдел ГБ", exact: true, level: 3 })).toBeVisible();
+});
+
+test("structure map search, branch collapse and information card use CRM data", async ({ page }) => {
+  await page.goto("/dashboard/organization");
+  const card = page.getByRole("complementary", { name: "Информационная карточка" });
+  await page.getByRole("heading", { name: "Производство", exact: true }).click();
+  await expect(card).toContainText("Карточка отдела");
+  await expect(card).toContainText("Ольга Юнусова");
+
+  await page.getByRole("button", { name: "Свернуть ветки", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Отдел ГБ", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Раскрыть ветки", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Отдел ГБ", exact: true })).toBeVisible();
+
+  await page.getByLabel("Поиск по структуре").fill("Римма");
+  await expect(page.getByRole("heading", { name: "Кадровый отдел", exact: true })).toHaveCount(0);
+  const employee = page.getByRole("button", { name: /Главный бухгалтер\s*Римма Адилова/ });
+  await expect(employee).toBeVisible();
+  await employee.click();
+  await expect(card).toContainText("Карточка сотрудника");
+  await expect(card).toContainText("Производство · Отдел ГБ");
+  await expect(card).toContainText("Ольга Юнусова");
+
+  await page.getByLabel("Поиск по структуре").fill("нет такого");
+  await expect(page.getByText("Ничего не найдено по запросу «нет такого».")).toBeVisible();
 });
