@@ -171,6 +171,17 @@ const StructureMapPage: React.FC = () => {
   };
   const positionsOf = (deptId: string) => positions.filter((p) => p.department_id === deptId).sort(byName);
   const holders = (posId: string) => employees.filter((e) => e.position_id === posId).sort((a, b) => a.full_name.localeCompare(b.full_name, "ru"));
+  const belongsHere = (e: Employee, deptId: string) => e.department_id === deptId || !e.department_id || !deptById.has(e.department_id);
+  /** Staff whose own department differs from their position's department, grouped by position. */
+  const foreignStaff = (deptId: string) => {
+    const groups = new Map<string, Employee[]>();
+    employees.forEach((e) => {
+      const pos = e.position_id ? posById.get(e.position_id) : undefined;
+      if (e.department_id !== deptId || !pos || pos.department_id === deptId || topIds.has(pos.id)) return;
+      groups.set(pos.id, [...(groups.get(pos.id) ?? []), e]);
+    });
+    return [...groups.entries()].map(([posId, staff]) => ({ pos: posById.get(posId)!, staff })).sort((a, b) => byName(a.pos, b.pos));
+  };
   const unpositioned = (deptId: string) => employees.filter((e) => e.department_id === deptId && (!e.position_id || !posById.has(e.position_id)));
   const titleOf = (e: Employee) => (e.position_id && posById.get(e.position_id)?.name) || "Должность не указана";
   const deptPath = (id: string | null): string => {
@@ -248,6 +259,7 @@ const StructureMapPage: React.FC = () => {
       if (!hit(e.full_name) && !hit(e.email)) return;
       emps.add(e.id);
       roleIds.add(e.position_id && posById.has(e.position_id) ? e.position_id : `${NO_POSITION}:${e.department_id}`);
+      if (e.position_id) roleIds.add(`${e.position_id}@${e.department_id}`);
       mark(e.department_id ?? (e.position_id ? posById.get(e.position_id)?.department_id ?? null : null));
     });
     return { depts, full, roleIds, emps };
@@ -378,7 +390,8 @@ const StructureMapPage: React.FC = () => {
       if (d.kind === "position") {
         const pos = posById.get(d.id)!;
         const dept = deptById.get(target.id)!;
-        const staff = holders(pos.id).filter((e) => e.department_id !== dept.id);
+        // Only staff who sit in the position's current department move with it.
+        const staff = holders(pos.id).filter((e) => e.department_id !== dept.id && (e.department_id === pos.department_id || !e.department_id));
         if (!confirm(`Перенести должность «${pos.name}» в отдел «${dept.name}»?${staff.length ? `\nСотрудники на должности (${staff.length}) перейдут вместе с ней.` : ""}`)) return;
         setBusyMove(true);
         const saved: Position = await updatePosition(pos.id, { department_id: dept.id });
@@ -401,9 +414,9 @@ const StructureMapPage: React.FC = () => {
         text = `${emp.full_name} → «${pos.name}»`;
       } else {
         const dept = deptById.get(target.id)!;
-        const keep = emp.position_id && posById.get(emp.position_id)?.department_id === dept.id;
-        if (!confirm(`Перевести ${emp.full_name} в отдел «${dept.name}»?${keep ? "" : "\nТекущая должность будет снята — назначьте новую, перетащив сотрудника на должность."}`)) return;
-        payload = { department_id: dept.id, position_id: keep ? emp.position_id : null };
+        const pos = emp.position_id ? posById.get(emp.position_id) : undefined;
+        if (!confirm(`Перевести ${emp.full_name} в отдел «${dept.name}»?${pos ? `\nДолжность «${pos.name}» сохранится. Чтобы сменить её, перетащите сотрудника на нужную должность.` : ""}`)) return;
+        payload = { department_id: dept.id, position_id: emp.position_id };
         text = `${emp.full_name} переведён(а) в «${dept.name}»`;
       }
       setBusyMove(true);
@@ -434,11 +447,12 @@ const StructureMapPage: React.FC = () => {
     </span>
   );
 
-  const renderRole = (key: string, name: string, staff: Employee[], deptId: string, position?: Position) => {
+  const renderRole = (key: string, name: string, staff: Employee[], deptId: string, position?: Position, foreignDept?: string) => {
     if (matches && !matches.full.has(deptId) && !matches.roleIds.has(key)) return null;
     const showAll = !matches || matches.full.has(deptId) || hit(name);
     const shown = showAll ? staff : staff.filter((e) => matches!.emps.has(e.id));
     const open = openRoles.has(key) || (!!matches && staff.some((e) => matches.emps.has(e.id)));
+    if (foreignDept !== undefined) position = undefined;
     return (
       <li key={key} className={`${s.roleBranch} ${position ? dropClass({ kind: "position", id: position.id }) : ""}`} {...(position ? dropAttrs({ kind: "position", id: position.id }) : {})}>
         <div className={`${s.roleNode} ${position && isSel("position", position.id) ? s.roleSelected : ""} ${hit(name) ? s.hit : ""} ${position && canEdit ? s.draggable : ""} ${drag?.kind === "position" && drag.id === position?.id ? s.dragging : ""}`}
@@ -449,7 +463,7 @@ const StructureMapPage: React.FC = () => {
           </button>
           <button type="button" className={s.roleBody} onClick={() => position ? setSelection({ kind: "position", id: position.id }) : toggle(setOpenRoles, key)}>
             <span className={s.roleName}>{name}</span>
-            <small className={s.posCount}>{staff.length ? people(staff.length) : "вакансия"}</small>
+            <small className={s.posCount}>{staff.length ? people(staff.length) : "вакансия"}{foreignDept !== undefined && <em className={s.foreign}> · должность отдела «{foreignDept}»</em>}</small>
           </button>
         </div>
         {open && staff.length > 0 && (
@@ -469,7 +483,8 @@ const StructureMapPage: React.FC = () => {
     const deptPositions = positionsOf(dept.id);
     const loose = unpositioned(dept.id);
     const rolesList = [
-      ...deptPositions.map((p) => renderRole(p.id, p.name, holders(p.id), dept.id, p)),
+      ...deptPositions.map((p) => renderRole(p.id, p.name, holders(p.id).filter((e) => belongsHere(e, dept.id)), dept.id, p)),
+      ...foreignStaff(dept.id).map(({ pos, staff }) => renderRole(`${pos.id}@${dept.id}`, pos.name, staff, dept.id, pos, pos.department_id ? deptById.get(pos.department_id)?.name ?? "—" : "—")),
       loose.length > 0 ? renderRole(`${NO_POSITION}:${dept.id}`, "Без должности", loose, dept.id) : null,
     ].filter(Boolean);
     return (
@@ -647,6 +662,9 @@ const StructureMapPage: React.FC = () => {
         <div className={s.section}>
           <span className={s.detailLabel}>Место в структуре</span>
           <Row label="Руководитель"><PersonLink e={manager} /></Row>
+          {pos && d && pos.department_id && pos.department_id !== d.id && (
+            <Row label="Внимание"><span className={s.warn}>Должность относится к отделу «{deptById.get(pos.department_id)?.name}»</span></Row>
+          )}
           {headed.length > 0 && <Row label="Руководит">{headed.map((x) => x.name).join(", ")}</Row>}
           <Row label="Прямые подчинённые">{stats.direct ? people(stats.direct) : "Нет"}</Row>
           <Row label="Всего в подчинении">{stats.total ? people(stats.total) : "Нет"}</Row>

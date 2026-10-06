@@ -185,3 +185,31 @@ test("company leadership level: add director, see subordinates, change heads in 
   await report.getByRole("button", { name: "Закрыть отчёт" }).click();
   await expect(report).toHaveCount(0);
 });
+
+test("employee is shown in own department even if the position belongs to another, and can be moved between departments", async ({ page }) => {
+  const patches: { path: string; body: Record<string, unknown> }[] = [];
+  await page.route("**/api/v1/employees/", route => route.fulfill({ json: [
+    { id: "e1", full_name: "Ольга Юнусова", department_id: "d1", position_id: null },
+    { id: "e2", full_name: "Римма Адилова", department_id: "d2", position_id: "p1" },
+    { id: "e3", full_name: "Наталья Шерстнева", department_id: "d3", position_id: "p1" },
+  ] }));
+  await page.route(/\/api\/v1\/employees\/e\d$/, async route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    patches.push({ path: new URL(route.request().url()).pathname, body });
+    await route.fulfill({ json: { id: "e3", full_name: "Наталья Шерстнева", company_id: "company", department_id: "d3", position_id: "p1", ...body } });
+  });
+  page.on("dialog", dialog => dialog.accept());
+  await page.goto("/dashboard/organization");
+
+  const hr = page.getByRole("list", { name: "Должности: Кадровый отдел" });
+  await expect(hr).toContainText("Главный бухгалтер");
+  await expect(hr).toContainText("должность отдела «Отдел ГБ»");
+  await hr.getByRole("button", { name: "Показать сотрудников: Главный бухгалтер" }).click();
+  await expect(hr.getByRole("button", { name: /Наталья Шерстнева/ })).toBeVisible();
+  await page.getByRole("button", { name: "Показать сотрудников: Главный бухгалтер" }).first().click();
+  await expect(page.getByRole("list", { name: "Должности: Отдел ГБ" })).not.toContainText("Наталья Шерстнева");
+
+  await hr.getByRole("button", { name: /Наталья Шерстнева/ }).dragTo(page.getByRole("heading", { name: "Производство", exact: true }));
+  expect(patches).toEqual([{ path: "/api/v1/employees/e3", body: { department_id: "d1", position_id: "p1" } }]);
+  await expect(page.getByRole("list", { name: "Должности: Кадровый отдел" })).toHaveCount(0);
+});

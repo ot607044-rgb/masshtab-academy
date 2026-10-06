@@ -301,3 +301,5 @@ div.module { max-width: none; padding: 12px 20px 20px; }
 .table td { padding: 8px 10px; border-top: 1px solid #f0edf3; color: #4b4654; vertical-align: middle; }
 .table select { max-width: 260px; height: 32px; padding: 0 6px; border: 1px solid #e0dde7; border-radius: 8px; font: inherit; font-size: 13px; background: #fff; }
 .num { text-align: right; white-space: nowrap; }
+.foreign { color: #b07a2a; font-style: normal; }
+.warn { color: #9a6418; }
