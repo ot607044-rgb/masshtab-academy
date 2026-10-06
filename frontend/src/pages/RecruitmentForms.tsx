@@ -41,7 +41,7 @@ export function InterviewForm({ candidates, candidateId, onClose, onSaved }: { c
     event.preventDefault(); setBusy(true); setError("");
     const form = new FormData(event.currentTarget);
     try {
-      await createInterview({ candidate_id: String(form.get("candidate_id")), title: String(form.get("title")), starts_at: new Date(String(form.get("starts_at"))).toISOString(), duration_minutes: Number(form.get("duration")), meeting_url: String(form.get("meeting_url")) || null, notes: String(form.get("notes")) || null });
+      await createInterview({ candidate_id: String(form.get("candidate_id")), title: String(form.get("title")), starts_at: new Date(String(form.get("starts_at"))).toISOString(), duration_minutes: Number(form.get("duration")), participant_ids: [], meeting_url: String(form.get("meeting_url")) || null, notes: String(form.get("notes")) || null });
       await onSaved(); onClose();
     } catch (e) { setError(apiError(e)); } finally { setBusy(false); }
   }

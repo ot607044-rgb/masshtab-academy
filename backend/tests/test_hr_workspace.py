@@ -302,6 +302,68 @@ async def test_interview_is_in_calendar_and_requires_timezone(context):
 
 
 @pytest.mark.asyncio
+async def test_interview_participants_conflicts_update_and_calendar_summary(context):
+    client, db, user, *_ = context
+    participant = User(id=uuid.uuid4(), company_id=user.company_id, email="lead@example.org", full_name="Lead", hashed_password="unused", role="department_head")
+    foreign = User(id=uuid.uuid4(), company_id=uuid.uuid4(), email="foreign@example.org", full_name="Foreign", hashed_password="unused", role="hr")
+    db.add_all([participant, foreign])
+    await db.commit()
+    candidate = await create_candidate(client)
+
+    payload = {
+        "candidate_id": candidate["id"],
+        "participant_ids": [str(participant.id)],
+        "title": "Interview",
+        "starts_at": "2026-10-05T10:00:00+05:00",
+        "duration_minutes": 60,
+        "notes": "Initial screen",
+    }
+    created = await client.post("/api/v1/recruitment/interviews", json=payload)
+    assert created.status_code == 201, created.text
+    meeting = created.json()
+    assert meeting["participant_ids"] == [str(participant.id)]
+    assert meeting["participants"][0]["full_name"] == "Lead"
+
+    overlapping = await client.post("/api/v1/recruitment/interviews", json={**payload, "starts_at": "2026-10-05T10:30:00+05:00"})
+    assert overlapping.status_code == 409
+    assert "занят" in overlapping.json()["detail"].lower()
+    foreign_participant = await client.patch(f"/api/v1/recruitment/interviews/{meeting['id']}", json={"participant_ids": [str(foreign.id)]})
+    assert foreign_participant.status_code == 404
+
+    moved = await client.patch(
+        f"/api/v1/recruitment/interviews/{meeting['id']}",
+        json={"title": "Final", "starts_at": "2026-10-05T12:00:00+05:00", "duration_minutes": 30, "participant_ids": []},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["title"] == "Final"
+    assert moved.json()["duration_minutes"] == 30
+    assert moved.json()["participant_ids"] == []
+
+    summary = (await client.get(
+        "/api/v1/recruitment/interviews/calendar",
+        params={"start": "2026-10-05T00:00:00+05:00", "end": "2026-10-12T00:00:00+05:00", "day": "2026-10-05T00:00:00+05:00"},
+    )).json()
+    assert summary["day_load_percent"] == 6
+    assert summary["week_load_percent"] == 1
+    assert summary["best_slot"]["starts_at"].startswith("2026-10-05T12:30:00")
+    assert summary["free_slots"]
+
+
+@pytest.mark.asyncio
+async def test_recruitment_participants_are_company_scoped_for_hr(context):
+    client, db, user, *_ = context
+    own = User(id=uuid.uuid4(), company_id=user.company_id, email="own@example.org", full_name="Own", hashed_password="unused", role="employee")
+    other = User(id=uuid.uuid4(), company_id=uuid.uuid4(), email="other@example.org", full_name="Other", hashed_password="unused", role="employee")
+    db.add_all([own, other])
+    await db.commit()
+
+    participants = (await client.get("/api/v1/recruitment/participants")).json()
+    names = {item["full_name"] for item in participants}
+    assert {"HR", "Own"} <= names
+    assert "Other" not in names
+
+
+@pytest.mark.asyncio
 async def test_employee_cannot_access_hr_or_other_profile(context):
     client, db, user, employee, _ = context
     user.role = "employee"

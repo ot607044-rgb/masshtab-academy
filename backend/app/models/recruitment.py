@@ -45,6 +45,7 @@ class Interview(Base, TimestampMixin):
     title = Column(String(300), nullable=False)
     starts_at = Column(DateTime(timezone=True), nullable=False, index=True)
     duration_minutes = Column(Integer, nullable=False, default=30)
+    participant_ids = Column(JSON, nullable=False, default=list)
     meeting_url = Column(String(2048))
     notes = Column(Text)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))

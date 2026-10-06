@@ -1,27 +1,213 @@
-import { useCallback, useEffect, useState } from "react";
-import { CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, Trash2 } from "lucide-react";
-import { PageHeading, Empty, LoadState, dateLabel } from "../components/AcademyUI";
-import { getCandidates, getInterviews, cancelInterview, apiError, type Candidate, type Interview } from "../api/workspace";
-import { InterviewForm } from "./RecruitmentForms";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { CalendarClock, CalendarPlus, CheckCircle2, ChevronLeft, ChevronRight, Clock, ExternalLink, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
+import { PageHeading, Empty, LoadState, Modal, dateLabel } from "../components/AcademyUI";
+import { getCandidates, getInterviewCalendar, getMeetingParticipants, createInterview, updateInterview, cancelInterview, apiError, type CalendarParticipant, type CalendarSummary, type Candidate, type FreeSlot, type Interview } from "../api/workspace";
 
-const key = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const dayKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const minutes = (date: Date) => date.getHours() * 60 + date.getMinutes();
+const timeLabel = (value: string | Date) => new Date(value).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+const localInputValue = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+function weekStart(date: Date) {
+  const start = new Date(date);
+  start.setDate(start.getDate() - (start.getDay() + 6) % 7);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function metric(label: string, value: string, note: string) {
+  return <div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>;
+}
+
+function slotLabel(slot: FreeSlot | null) {
+  return slot ? `${timeLabel(slot.starts_at)}-${timeLabel(slot.ends_at)}` : "Нет слота";
+}
+
+function MeetingForm({ candidates, participants, meeting, initialDate, onClose, onSaved }: { candidates: Candidate[]; participants: CalendarParticipant[]; meeting?: Interview; initialDate: Date; onClose: () => void; onSaved: () => Promise<void> }) {
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>(meeting?.participant_ids ?? []);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const start = meeting ? new Date(meeting.starts_at) : new Date(initialDate);
+  if (!meeting && start.getHours() === 0) start.setHours(10, 0, 0, 0);
+
+  function toggleParticipant(id: string) {
+    setSelectedParticipants(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    const payload = {
+      candidate_id: String(form.get("candidate_id")),
+      title: String(form.get("title")),
+      starts_at: new Date(String(form.get("starts_at"))).toISOString(),
+      duration_minutes: Number(form.get("duration_minutes")),
+      participant_ids: selectedParticipants,
+      meeting_url: String(form.get("meeting_url")) || null,
+      notes: String(form.get("notes")) || null,
+    };
+    try {
+      if (meeting) await updateInterview(meeting.id, payload);
+      else await createInterview(payload);
+      await onSaved();
+      onClose();
+    } catch (e) {
+      setError(apiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <Modal title={meeting ? "Редактировать встречу" : "Назначить встречу"} onClose={onClose}>
+    <form onSubmit={submit} className="academy-calendar-form">
+      <label htmlFor="calendar-title">Название встречи</label>
+      <input id="calendar-title" name="title" required maxLength={300} defaultValue={meeting?.title ?? "Собеседование"} autoFocus />
+      <label htmlFor="calendar-candidate">Участник подбора</label>
+      <select id="calendar-candidate" name="candidate_id" required defaultValue={meeting?.candidate_id ?? ""}>
+        <option value="">Выберите кандидата</option>
+        {candidates.filter(c => meeting?.candidate_id === c.id || !["hired", "rejected"].includes(c.stage)).map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+      </select>
+      <div className="academy-calendar-form-grid">
+        <div><label htmlFor="calendar-start">Дата и время · {Intl.DateTimeFormat().resolvedOptions().timeZone}</label><input id="calendar-start" name="starts_at" type="datetime-local" required defaultValue={localInputValue(start)} /></div>
+        <div><label htmlFor="calendar-duration">Длительность</label><select id="calendar-duration" name="duration_minutes" defaultValue={meeting?.duration_minutes ?? 30}><option value="15">15 минут</option><option value="30">30 минут</option><option value="45">45 минут</option><option value="60">1 час</option><option value="90">1,5 часа</option><option value="120">2 часа</option></select></div>
+      </div>
+      <label>Участники</label>
+      <div className="academy-participant-picker">
+        {participants.map(person => <button type="button" key={person.id} className={selectedParticipants.includes(person.id) ? "active" : ""} onClick={() => toggleParticipant(person.id)}><Users size={14} />{person.full_name}</button>)}
+        {!participants.length && <small>Нет доступных участников</small>}
+      </div>
+      <label htmlFor="calendar-url">Ссылка на встречу</label>
+      <input id="calendar-url" name="meeting_url" type="url" placeholder="https://" defaultValue={meeting?.meeting_url ?? ""} />
+      <label htmlFor="calendar-notes">Описание</label>
+      <textarea id="calendar-notes" name="notes" maxLength={10000} defaultValue={meeting?.notes ?? ""} />
+      {error && <p className="error-msg" role="alert">{error}</p>}
+      <div className="academy-dialog-actions"><button type="button" className="btn-secondary" onClick={onClose} disabled={busy}>Отмена</button><button className="btn-primary" disabled={busy}><CalendarPlus size={16} />{busy ? "Проверяем занятость..." : meeting ? "Сохранить" : "Назначить"}</button></div>
+    </form>
+  </Modal>;
+}
+
+function MeetingDetails({ meeting, onEdit, onDelete, onClose, busy }: { meeting: Interview; onEdit: () => void; onDelete: () => void; onClose: () => void; busy: boolean }) {
+  return <Modal title={meeting.title} onClose={onClose}>
+    <div className="academy-meeting-detail">
+      <p><Clock size={16} />{dateLabel(meeting.starts_at)} · {timeLabel(meeting.starts_at)} · {meeting.duration_minutes} мин</p>
+      <p><Users size={16} />{meeting.candidate_name}{meeting.participants?.length ? ` · ${meeting.participants.map(item => item.full_name).join(", ")}` : ""}</p>
+      {meeting.notes && <p className="academy-meeting-notes">{meeting.notes}</p>}
+      <div className="academy-actions">
+        {meeting.meeting_url && <a className="btn-secondary" href={meeting.meeting_url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />Подключиться</a>}
+        <button className="btn-secondary" onClick={onEdit}><Pencil size={15} />Редактировать</button>
+        <button className="btn-secondary" onClick={onDelete} disabled={busy}><Trash2 size={15} />{busy ? "Удаление..." : "Отменить"}</button>
+      </div>
+    </div>
+  </Modal>;
+}
+
 export default function CalendarPage() {
   const [date, setDate] = useState(() => new Date());
-  const [meetings, setMeetings] = useState<Interview[]>([]);
+  const [summary, setSummary] = useState<CalendarSummary | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [participants, setParticipants] = useState<CalendarParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [form, setForm] = useState(false);
+  const [form, setForm] = useState<"new" | "edit" | null>(null);
+  const [selected, setSelected] = useState<Interview | null>(null);
   const [busy, setBusy] = useState<string>();
-  const start = new Date(date); start.setDate(start.getDate() - (start.getDay() + 6) % 7); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 7);
-  const startISO = start.toISOString(), endISO = end.toISOString();
-  const reload = useCallback(async () => { const [events, people] = await Promise.all([getInterviews(startISO, endISO), getCandidates()]); setMeetings(events); setCandidates(people); }, [startISO, endISO]);
-  const load = useCallback(() => { setLoading(true); setError(""); reload().catch(e => setError(apiError(e))).finally(() => setLoading(false)); }, [reload]);
+
+  const start = useMemo(() => weekStart(date), [date]);
+  const end = useMemo(() => { const next = new Date(start); next.setDate(next.getDate() + 7); return next; }, [start]);
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const next = new Date(start); next.setDate(next.getDate() + i); return next; }), [start]);
+
+  const reload = useCallback(async () => {
+    const [calendar, people, participantList] = await Promise.all([getInterviewCalendar(start.toISOString(), end.toISOString(), date.toISOString()), getCandidates(), getMeetingParticipants()]);
+    setSummary(calendar);
+    setCandidates(people);
+    setParticipants(participantList);
+  }, [date, end, start]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError("");
+    reload().catch(e => setError(apiError(e))).finally(() => setLoading(false));
+  }, [reload]);
+
   useEffect(load, [load]);
-  function move(days: number) { const next = new Date(date); next.setDate(next.getDate() + days); setDate(next); }
-  async function cancel(id: string) { if (!confirm("Отменить собеседование?")) return; setBusy(id); try { await cancelInterview(id); await reload(); } catch (e) { setError(apiError(e)); } finally { setBusy(undefined); } }
-  const days = Array.from({ length: 7 }, (_, i) => { const next = new Date(start); next.setDate(next.getDate() + i); return next; });
-  const events = meetings.filter(m => key(new Date(m.starts_at)) === key(date));
-  return <div className="academy-page"><PageHeading title="Календарь" subtitle={`Собеседования · ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}><button className="btn-primary" onClick={() => setForm(true)}><CalendarPlus size={16} />Назначить встречу</button></PageHeading><div className="academy-filters"><button className="academy-icon" title="Предыдущая неделя" aria-label="Предыдущая неделя" onClick={() => move(-7)}><ChevronLeft size={20} /></button><strong style={{ fontSize: 13 }}>{dateLabel(startISO)} — {dateLabel(new Date(end.getTime() - 1).toISOString())}</strong><button className="academy-icon" title="Следующая неделя" aria-label="Следующая неделя" onClick={() => move(7)}><ChevronRight size={20} /></button><button className="btn-secondary" onClick={() => setDate(new Date())}>Сегодня</button></div><div className="academy-calendar-days">{days.map(day => <button key={key(day)} className={key(day) === key(date) ? "active" : ""} aria-pressed={key(day) === key(date)} onClick={() => setDate(day)}>{day.toLocaleDateString("ru-RU", { weekday: "short" })}<strong>{day.getDate()}</strong></button>)}</div><section className="academy-section"><div className="academy-section-heading"><h2>{date.toLocaleDateString("ru-RU", { day: "numeric", month: "long", weekday: "long" })}</h2><span className="academy-badge gray">Встреч: {events.length}</span></div>{loading ? <LoadState error="" retry={load} /> : error ? <LoadState error={error} retry={load} /> : <>{events.map(meeting => <article className="academy-meeting" key={meeting.id}><time>{new Date(meeting.starts_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time><div className="academy-section-heading" style={{ marginBottom: 0 }}><div><strong>{meeting.title}</strong><small>{meeting.candidate_name} · {meeting.duration_minutes} мин</small>{meeting.notes && <small>{meeting.notes}</small>}</div><div className="academy-actions">{meeting.meeting_url && <a className="btn-secondary" href={meeting.meeting_url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />Подключиться</a>}<button className="academy-icon" title="Отменить встречу" aria-label="Отменить встречу" disabled={busy === meeting.id} onClick={() => cancel(meeting.id)}><Trash2 size={17} /></button></div></div></article>)}{!events.length && <Empty>На этот день встреч нет</Empty>}</>}</section>{form && <InterviewForm candidates={candidates} onClose={() => setForm(false)} onSaved={reload} />}</div>;
+
+  function move(daysCount: number) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + daysCount);
+    setDate(next);
+  }
+
+  async function remove(meeting: Interview) {
+    if (!confirm("Отменить встречу?")) return;
+    setBusy(meeting.id);
+    try {
+      await cancelInterview(meeting.id);
+      setSelected(null);
+      await reload();
+    } catch (e) {
+      setError(apiError(e));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  const sortedMeetings = [...(summary?.meetings ?? []).filter(meeting => dayKey(new Date(meeting.starts_at)) === dayKey(date))].sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+
+  return <div className="academy-page academy-calendar-page">
+    <PageHeading title="Календарь" subtitle={`Командный центр встреч · ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}>
+      <button className="btn-primary" onClick={() => setForm("new")}><CalendarPlus size={16} />Назначить встречу</button>
+    </PageHeading>
+    <div className="academy-calendar-shell">
+      <section className="academy-calendar-main">
+        <div className="academy-calendar-toolbar">
+          <div className="academy-actions">
+            <button className="academy-icon" title="Предыдущая неделя" aria-label="Предыдущая неделя" onClick={() => move(-7)}><ChevronLeft size={20} /></button>
+            <strong>{dateLabel(start.toISOString())} — {dateLabel(new Date(end.getTime() - 1).toISOString())}</strong>
+            <button className="academy-icon" title="Следующая неделя" aria-label="Следующая неделя" onClick={() => move(7)}><ChevronRight size={20} /></button>
+          </div>
+          <button className="btn-secondary" onClick={() => setDate(new Date())}>Сегодня</button>
+        </div>
+        <div className="academy-calendar-days">
+          {days.map(day => {
+            const count = (summary?.meetings ?? []).filter(meeting => dayKey(new Date(meeting.starts_at)) === dayKey(day)).length;
+            return <button key={dayKey(day)} className={dayKey(day) === dayKey(date) ? "active" : ""} aria-pressed={dayKey(day) === dayKey(date)} onClick={() => setDate(day)}>{day.toLocaleDateString("ru-RU", { weekday: "short" })}<strong>{day.getDate()}</strong><span>{count} встреч</span></button>;
+          })}
+        </div>
+        <div className="academy-metrics academy-calendar-metrics">
+          {metric("Загрузка дня", `${summary?.day_load_percent ?? 0}%`, "Рабочее окно 09:00-18:00")}
+          {metric("Загрузка недели", `${summary?.week_load_percent ?? 0}%`, "По встречам системы")}
+          {metric("Свободных окон", String(summary?.free_slots.length ?? 0), "Для выбранного дня")}
+          {metric("Лучший слот", slotLabel(summary?.best_slot ?? null), "Самый длинный интервал")}
+        </div>
+        <section className="academy-section academy-calendar-board">
+          <div className="academy-section-heading"><h2>{date.toLocaleDateString("ru-RU", { day: "numeric", month: "long", weekday: "long" })}</h2><span className="academy-badge gray">Встреч: {sortedMeetings.length}</span></div>
+          {loading ? <LoadState error="" retry={load} /> : error ? <LoadState error={error} retry={load} /> : sortedMeetings.length ? <div className="academy-day-track">
+            {sortedMeetings.map(meeting => {
+              const top = Math.max(0, minutes(new Date(meeting.starts_at)) - 9 * 60);
+              const height = Math.max(46, meeting.duration_minutes);
+              return <button key={meeting.id} className="academy-calendar-event" style={{ "--event-top": `${top}px`, "--event-height": `${height}px` } as CSSProperties} onClick={() => setSelected(meeting)}><time>{timeLabel(meeting.starts_at)}</time><strong>{meeting.title}</strong><span>{meeting.candidate_name} · {meeting.duration_minutes} мин</span><MoreHorizontal size={16} /></button>;
+            })}
+          </div> : <Empty>На этот день встреч нет. Свободные слоты доступны справа.</Empty>}
+        </section>
+      </section>
+      <aside className="academy-calendar-side">
+        <section className="academy-section">
+          <div className="academy-section-heading"><h2>Свободное время</h2><Clock size={18} /></div>
+          <div className="academy-free-slots">
+            {summary?.free_slots.map(slot => <button key={`${slot.starts_at}-${slot.ends_at}`} onClick={() => { setDate(new Date(slot.starts_at)); setForm("new"); }}><CheckCircle2 size={16} /><span>{slotLabel(slot)}</span><small>{slot.duration_minutes} мин</small></button>)}
+            {!summary?.free_slots.length && <Empty>Свободных окон нет</Empty>}
+          </div>
+        </section>
+        <section className="academy-section">
+          <div className="academy-section-heading"><h2>Лучший слот</h2><CalendarClock size={18} /></div>
+          {summary?.best_slot ? <button className="academy-best-slot" onClick={() => { setDate(new Date(summary.best_slot!.starts_at)); setForm("new"); }}><strong>{slotLabel(summary.best_slot)}</strong><span>{summary.best_slot.duration_minutes} минут свободно</span></button> : <Empty>Подходящего слота нет</Empty>}
+        </section>
+      </aside>
+    </div>
+    {form === "new" && <MeetingForm candidates={candidates} participants={participants} initialDate={date} onClose={() => setForm(null)} onSaved={reload} />}
+    {form === "edit" && selected && <MeetingForm candidates={candidates} participants={participants} meeting={selected} initialDate={date} onClose={() => setForm(null)} onSaved={async () => { await reload(); setSelected(null); }} />}
+    {selected && form !== "edit" && <MeetingDetails meeting={selected} onClose={() => setSelected(null)} onEdit={() => setForm("edit")} onDelete={() => remove(selected)} busy={busy === selected.id} />}
+  </div>;
 }

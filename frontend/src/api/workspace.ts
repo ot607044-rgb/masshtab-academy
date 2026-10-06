@@ -16,7 +16,17 @@ export interface Candidate {
 export interface Interview {
   id: string; candidate_id: string; candidate_name: string;
   title: string; starts_at: string; duration_minutes: number;
+  participant_ids: string[]; participants?: CalendarParticipant[];
   meeting_url: string | null; notes: string | null;
+}
+export interface CalendarParticipant { id: string; full_name: string; email: string; role: string }
+export interface FreeSlot { starts_at: string; ends_at: string; duration_minutes: number }
+export interface CalendarSummary {
+  meetings: Interview[];
+  day_load_percent: number;
+  week_load_percent: number;
+  free_slots: FreeSlot[];
+  best_slot: FreeSlot | null;
 }
 export interface Progress {
   employee_id: string; full_name: string; department_name: string | null;
@@ -55,7 +65,10 @@ export const createCandidate = (data: { full_name: string; vacancy_id: string | 
 export const updateCandidate = (id: string, data: { stage?: string; notes?: string | null }) => client.patch<Candidate>(`/api/v1/recruitment/candidates/${id}`, data).then(r => r.data);
 export const hireCandidate = (id: string, hire_date: string) => client.post<{ employee_id: string }>(`/api/v1/recruitment/candidates/${id}/hire`, { hire_date }).then(r => r.data);
 export const getInterviews = (start?: string, end?: string) => client.get<Interview[]>("/api/v1/recruitment/interviews", { params: { start, end } }).then(r => r.data);
-export const createInterview = (data: Omit<Interview, "id" | "candidate_name">) => client.post<Interview>("/api/v1/recruitment/interviews", data).then(r => r.data);
+export const getInterviewCalendar = (start: string, end: string, day: string) => client.get<CalendarSummary>("/api/v1/recruitment/interviews/calendar", { params: { start, end, day } }).then(r => r.data);
+export const getMeetingParticipants = () => client.get<CalendarParticipant[]>("/api/v1/recruitment/participants").then(r => r.data);
+export const createInterview = (data: Omit<Interview, "id" | "candidate_name" | "participants">) => client.post<Interview>("/api/v1/recruitment/interviews", data).then(r => r.data);
+export const updateInterview = (id: string, data: Partial<Omit<Interview, "id" | "candidate_name" | "participants">>) => client.patch<Interview>(`/api/v1/recruitment/interviews/${id}`, data).then(r => r.data);
 export const cancelInterview = (id: string) => client.delete(`/api/v1/recruitment/interviews/${id}`);
 
 export function apiError(error: unknown): string {

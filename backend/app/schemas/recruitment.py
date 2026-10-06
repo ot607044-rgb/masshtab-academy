@@ -43,6 +43,18 @@ class InterviewCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     starts_at: AwareDatetime
     duration_minutes: int = Field(default=30, ge=5, le=480)
+    participant_ids: list[UUID] = Field(default_factory=list, max_length=50)
+    meeting_url: HttpUrl | None = None
+    notes: str | None = Field(default=None, max_length=10000)
+
+
+class InterviewPatch(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    candidate_id: UUID | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    starts_at: AwareDatetime | None = None
+    duration_minutes: int | None = Field(default=None, ge=5, le=480)
+    participant_ids: list[UUID] | None = Field(default=None, max_length=50)
     meeting_url: HttpUrl | None = None
     notes: str | None = Field(default=None, max_length=10000)
 
