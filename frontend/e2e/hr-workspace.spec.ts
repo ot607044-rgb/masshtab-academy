@@ -10,6 +10,8 @@ test.beforeEach(async ({ page }) => {
     else if (path.includes("unread-count")) body = { count: 0 };
     else if (path === "/api/v1/workspace/dashboard") body = { stats: { vacancies: 8, candidates: 46, onboarding: 14, needs_attention: 1 }, attention: [{ employee_id: "e1", full_name: "Анна Смирнова", kind: "overdue", title: "Просрочено обучение", detail: "Уроков: 1" }], meetings: [], employees: [{ employee_id: "e1", full_name: "Анна Смирнова", position_name: "Бухгалтер", department_name: "Финансы", lessons_completed: 4, lessons_total: 5, completion_percent: 80, knowledge_percent: 58, weak_areas: ["Налоговые платежи"] }] };
     else if (path === "/api/v1/recruitment/vacancies") body = [{ id: "v1", title: "Бухгалтер", status: "open" }];
+    else if (path === "/api/v1/recruitment/interviews/calendar") body = { meetings: [], day_load_percent: 0, week_load_percent: 0, free_slots: [], best_slot: null, week_slots_count: 0 };
+    else if (path === "/api/v1/recruitment/availability") body = { rules: [], blocks: [], public_link: null, timezone: "Asia/Yekaterinburg", buffer_minutes: 0 };
     else if (path === "/api/v1/recruitment/candidates") body = [candidate];
     else if (path === "/api/v1/recruitment/candidates/c1") {
       if (route.request().method() === "PATCH") Object.assign(candidate, route.request().postDataJSON());
@@ -53,5 +55,5 @@ test("dashboard and mobile navigation render without overflow", async ({ page })
   await page.screenshot({ path: `../design-preview/implementation/dashboard-${test.info().project.name}.png`, fullPage: true });
   if (test.info().project.name === "mobile") await page.getByRole("button", { name: "Открыть меню" }).click();
   await page.getByRole("link", { name: "Календарь", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Календарь", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Календарь команды", exact: true })).toBeVisible();
 });

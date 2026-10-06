@@ -1,0 +1,54 @@
+/* Input and state styles for the approved components. */
+.calendar-module button:disabled { opacity: .55; cursor: wait; }
+.calendar-module button:focus-visible, .calendar-module input:focus-visible, .calendar-module select:focus-visible { outline: 2px solid var(--product-purple); outline-offset: 3px; }
+.calendar-module h1 { margin: 0; }
+.calendar-module.booking-page { min-height: 100vh; background: var(--product-bg); }
+.calendar-module.command { background: var(--product-bg); }
+.calendar-module dialog { margin: auto; border: 0; color: var(--product-text); max-height: calc(100dvh - 32px); }
+.calendar-module dialog.modal { overflow-y: auto; }
+.calendar-module dialog::backdrop { background: #26213b99; backdrop-filter: blur(5px); }
+.calendar-module .modal-title { margin: 0; }
+.calendar-module a { text-decoration: none; }
+.calendar-module .calendar-error { color: #a13c50; background: #fff1f3; padding: 12px; border-radius: 9px; font-size: 12px; }
+.calendar-module .calendar-state { padding: 18px; color: var(--product-muted); font-size: 12px; }
+.calendar-module .search input { background: transparent; border: 0; outline: 0; flex: 1; min-width: 0; font: inherit; color: inherit; }
+.calendar-module .modal input, .calendar-module .modal select, .calendar-module .modal textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--product-border); border-radius: 9px; background: white; padding: 10px; font: inherit; font-size: 12px; color: var(--product-text); }
+.calendar-module .week-row input.time-field { padding: 7px; width: 100%; min-width: 0; font: inherit; font-size: 10px; }
+.calendar-module .select-field { font: inherit; font-size: 10px; }
+.calendar-module .timezone select { width: 150px; border: 0; background: transparent; color: inherit; font: inherit; }
+.calendar-module .calendar-participants { display: flex; flex-wrap: wrap; gap: 6px; max-height: 140px; overflow-y: auto; }
+.calendar-module .calendar-participants button { border: 1px solid var(--product-border); background: white; border-radius: 8px; padding: 7px; font-size: 10px; }
+.calendar-module .calendar-participants button.active { background: var(--product-lilac); color: var(--product-purple); }
+.calendar-module .agenda-item { width: 100%; background: transparent; text-align: left; color: inherit; border-right: 0; border-bottom: 0; border-left: 0; cursor: pointer; }
+.calendar-module .agenda-person { flex: 1; min-width: 0; }
+.calendar-module .agenda-person b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-module .more { flex: 0 0 auto; }
+.calendar-module .booking-dates { max-height: 216px; overflow-y: auto; }
+.calendar-module .date-strip { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.calendar-module .calendar-day-input { border: 0; color: var(--product-purple); background: transparent; width: 115px; font-size: 10px; }
+.calendar-module .week-row.extra { padding-left: 49px; }
+.calendar-module .calendar-form-row { display: flex; align-items: center; gap: 8px; }
+.calendar-module .calendar-form-row input { width: auto; }
+@media (max-width: 700px) {
+  .calendar-module .topbar { height: auto; padding: 14px; flex-wrap: wrap; gap: 12px; }
+  .calendar-module .search { width: 100%; }
+  .calendar-module .top-actions { width: 100%; justify-content: space-between; }
+  .calendar-module .command-content { padding: 18px 12px; }
+  .calendar-module .welcome-row { align-items: flex-start; gap: 8px; }
+  .calendar-module .welcome-row .page-title { font-size: 23px; }
+  .calendar-module .mini-stat { padding: 8px; }
+  .calendar-module .section-head { flex-wrap: wrap; gap: 8px; padding: 12px 0; }
+  .calendar-module .agenda-actions { flex-wrap: wrap; gap: 8px; }
+  .calendar-module .week-row { grid-template-columns: 28px minmax(65px, 1fr) 80px 6px 80px 18px; gap: 4px; padding: 9px 6px; }
+  .calendar-module .week-row.extra { padding-left: 6px; }
+  .calendar-module .availability-head, .calendar-module .availability-body { padding: 16px; }
+  .calendar-module .availability-tabs { padding: 0 8px; }
+  .calendar-module .availability-tabs button { font-size: 9px; padding: 10px 6px; }
+  .calendar-module .availability-footer { padding: 12px; flex-wrap: wrap; }
+  .calendar-module .privacy-grid { grid-template-columns: 1fr; }
+  .calendar-module .share-box > div span { overflow-wrap: anywhere; }
+  .calendar-module .booking-header { padding: 0 16px; }
+  .calendar-module .back-link { font-size: 8px; }
+  .calendar-module .slot-groups { margin-left: 0; }
+  .calendar-module .settings-summary { display: flex; }
+}

@@ -16,6 +16,7 @@ build/
 .env.preview
 frontend/test-results/
 frontend/playwright-report/
+.calendar-test/
 design-preview/
 
 # ── Node ──────────────────────────────────────────────────────────────────────

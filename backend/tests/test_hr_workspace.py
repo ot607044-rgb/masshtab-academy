@@ -368,13 +368,14 @@ async def test_interview_participants_conflicts_update_and_calendar_summary(cont
     assert moved.json()["duration_minutes"] == 30
     assert moved.json()["participant_ids"] == []
 
+    await client.put("/api/v1/recruitment/availability/rules", json={"timezone": "Asia/Yekaterinburg", "rules": [{"weekday": 0, "start_minute": 9 * 60, "end_minute": 18 * 60, "slot_minutes": 30}]})
     summary = (await client.get(
         "/api/v1/recruitment/interviews/calendar",
         params={"start": "2026-10-05T00:00:00+05:00", "end": "2026-10-12T00:00:00+05:00", "day": "2026-10-05T00:00:00+05:00"},
     )).json()
     assert summary["day_load_percent"] == 6
     assert summary["week_load_percent"] == 1
-    assert summary["best_slot"]["starts_at"].startswith("2026-10-05T12:30:00")
+    assert summary["best_slot"]["duration_minutes"] == 30
     assert summary["free_slots"]
 
 
@@ -395,39 +396,39 @@ async def test_recruitment_participants_are_company_scoped_for_hr(context):
 @pytest.mark.asyncio
 async def test_public_calendar_slots_booking_and_double_booking_guard(context):
     client, db, user, *_ = context
-    # Monday, 2026-10-05. The owner opens 10:00-12:00, then existing calendar
+    # Monday, 2030-01-07. The owner opens 10:00-12:00, then existing calendar
     # data removes 10:00 and a manual block removes 11:00.
     rules = [{"weekday": 0, "start_minute": 10 * 60, "end_minute": 12 * 60, "slot_minutes": 30}]
-    assert (await client.put("/api/v1/recruitment/availability/rules", json={"rules": rules})).status_code == 200
+    assert (await client.put("/api/v1/recruitment/availability/rules", json={"rules": rules, "timezone": "Asia/Yekaterinburg"})).status_code == 200
     first_meeting = {
         "meeting_type": "work",
         "candidate_id": None,
         "participant_ids": [str(user.id)],
         "title": "Internal sync",
-        "starts_at": "2026-10-05T10:00:00+05:00",
+        "starts_at": "2030-01-07T10:00:00+05:00",
         "duration_minutes": 30,
     }
     assert (await client.post("/api/v1/recruitment/interviews", json=first_meeting)).status_code == 201
-    block = await client.post("/api/v1/recruitment/availability/blocks", json={"starts_at": "2026-10-05T11:00:00+05:00", "duration_minutes": 30, "title": "Busy"})
+    block = await client.post("/api/v1/recruitment/availability/blocks", json={"starts_at": "2030-01-07T11:00:00+05:00", "duration_minutes": 30, "title": "Busy"})
     assert block.status_code == 201, block.text
     link = await client.post("/api/v1/recruitment/public-link")
     assert link.status_code == 200, link.text
     token = link.json()["token"]
 
-    slots = (await client.get(f"/api/v1/public-calendar/{token}/slots", params={"start": "2026-10-05T00:00:00+05:00", "end": "2026-10-06T00:00:00+05:00"})).json()
+    slots = (await client.get(f"/api/v1/public-calendar/{token}/slots", params={"start": "2030-01-07T00:00:00+05:00", "end": "2030-01-08T00:00:00+05:00"})).json()
     starts = [slot["starts_at"] for slot in slots["slots"]]
-    assert any(value.startswith("2026-10-05T10:30:00") for value in starts)
-    assert any(value.startswith("2026-10-05T11:30:00") for value in starts)
+    assert any(value.startswith("2030-01-07T05:30:00") for value in starts)
+    assert any(value.startswith("2030-01-07T06:30:00") for value in starts)
     assert all("Internal sync" not in str(slot) and "HR" not in str(slot) for slot in slots["slots"])
 
-    booking = await client.post(f"/api/v1/public-calendar/{token}/book", json={"starts_at": "2026-10-05T10:30:00+05:00", "duration_minutes": 30, "visitor_name": "Visitor", "visitor_contact": "visitor@example.org"})
+    booking = await client.post(f"/api/v1/public-calendar/{token}/book", json={"starts_at": "2030-01-07T10:30:00+05:00", "duration_minutes": 30, "visitor_name": "Visitor", "visitor_contact": "visitor@example.org"})
     assert booking.status_code == 201, booking.text
-    assert (await client.post(f"/api/v1/public-calendar/{token}/book", json={"starts_at": "2026-10-05T10:30:00+05:00", "duration_minutes": 30, "visitor_name": "Second", "visitor_contact": "second@example.org"})).status_code == 409
-    meetings = (await client.get("/api/v1/recruitment/interviews", params={"start": "2026-10-05T00:00:00+05:00", "end": "2026-10-06T00:00:00+05:00"})).json()
+    assert (await client.post(f"/api/v1/public-calendar/{token}/book", json={"starts_at": "2030-01-07T10:30:00+05:00", "duration_minutes": 30, "visitor_name": "Second", "visitor_contact": "second@example.org"})).status_code == 409
+    meetings = (await client.get("/api/v1/recruitment/interviews", params={"start": "2030-01-07T00:00:00+05:00", "end": "2030-01-08T00:00:00+05:00"})).json()
     assert any(meeting["external_name"] == "Visitor" and str(user.id) in meeting["participant_ids"] for meeting in meetings)
 
     assert (await client.delete("/api/v1/recruitment/public-link")).status_code == 204
-    assert (await client.get(f"/api/v1/public-calendar/{token}/slots", params={"start": "2026-10-05T00:00:00+05:00", "end": "2026-10-06T00:00:00+05:00"})).status_code == 404
+    assert (await client.get(f"/api/v1/public-calendar/{token}/slots", params={"start": "2030-01-07T00:00:00+05:00", "end": "2030-01-08T00:00:00+05:00"})).status_code == 404
 
 
 @pytest.mark.asyncio

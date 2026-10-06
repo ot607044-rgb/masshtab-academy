@@ -2,7 +2,8 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, HttpUrl
+from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, HttpUrl, model_validator
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 VacancyStatus = Literal["request", "open", "paused", "closed"]
 CandidateStage = Literal["new", "review", "interview", "testing", "offer", "rejected"]
@@ -65,6 +66,13 @@ class InterviewPatch(BaseModel):
     external_name: str | None = Field(default=None, max_length=255)
     external_contact: str | None = Field(default=None, max_length=255)
 
+    @model_validator(mode="after")
+    def required_fields_cannot_be_null(self):
+        for field in ("title", "starts_at", "duration_minutes", "participant_ids", "meeting_type"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
 
 class AvailabilityRuleIn(BaseModel):
     weekday: int = Field(ge=0, le=6)
@@ -74,21 +82,45 @@ class AvailabilityRuleIn(BaseModel):
 
 
 class AvailabilityRulesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     rules: list[AvailabilityRuleIn] = Field(default_factory=list, max_length=28)
+    timezone: str = Field(default="UTC", min_length=1, max_length=64)
+    buffer_minutes: int = Field(default=0, ge=0, le=120)
+
+    @model_validator(mode="after")
+    def valid_schedule(self):
+        try:
+            ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("Unknown IANA time zone")
+        ordered = sorted(self.rules, key=lambda r: (r.weekday, r.start_minute))
+        for index, rule in enumerate(ordered):
+            if rule.end_minute <= rule.start_minute:
+                raise ValueError("Window end must follow its start")
+            if index and ordered[index - 1].weekday == rule.weekday and ordered[index - 1].end_minute > rule.start_minute:
+                raise ValueError("Working windows must not overlap")
+        return self
 
 
 class CalendarBlockCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     starts_at: AwareDatetime
-    duration_minutes: int = Field(default=30, ge=5, le=480)
+    duration_minutes: int = Field(default=30, ge=5, le=44640)
     title: str | None = Field(default=None, max_length=300)
 
 
 class PublicBookingCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     starts_at: AwareDatetime
     duration_minutes: int = Field(default=30, ge=5, le=240)
     visitor_name: str = Field(min_length=1, max_length=255)
     visitor_contact: str = Field(min_length=1, max_length=255)
     notes: str | None = Field(default=None, max_length=10000)
+
+
+class PublicLinkUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
 
 
 class HireRequest(BaseModel):
