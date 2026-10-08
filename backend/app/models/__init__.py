@@ -11,6 +11,7 @@ from app.models.test import Test, Question, AnswerOption, TestAttempt, AttemptAn
 from app.models.notification import Notification  # noqa
 from app.models.recruitment import Vacancy, Candidate, Interview, CalendarAvailabilityRule, CalendarBlock, CalendarPublicLink  # noqa
 from app.models.calendar import CalendarSettings, CalendarChange  # noqa
+from app.models.regulation import PositionRegulation, RegulationAssignment  # noqa
 from app.models.settings import (  # noqa
     Funnel, FunnelStage, Status, CustomSection, CustomField, CustomSectionRecord,
 )
@@ -27,4 +28,5 @@ __all__ = [
     "Funnel", "FunnelStage", "Status", "CustomSection", "CustomField", "CustomSectionRecord",
     "Integration", "ExternalVacancy", "ExternalCandidate", "ExternalResponse", "IntegrationLog",
     "CalendarAvailabilityRule", "CalendarBlock", "CalendarPublicLink", "CalendarSettings", "CalendarChange",
+    "PositionRegulation", "RegulationAssignment",
 ]

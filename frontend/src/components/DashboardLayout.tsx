@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, Link } from "react-router-dom";
-import { LayoutDashboard, Users, BookOpen, BriefcaseBusiness, GraduationCap, CalendarDays, Settings, Layers, Library, Building2, Folder, LogOut, Menu, X, ShieldCheck, Search, Compass } from "lucide-react";
+import { LayoutDashboard, Users, BookOpen, BriefcaseBusiness, GraduationCap, CalendarDays, Settings, Layers, Library, Building2, Folder, LogOut, Menu, X, ShieldCheck, Search, Compass, ClipboardList } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useSupport } from "../context/SupportContext";
 import { getPendingCount } from "../api/support";
@@ -20,9 +20,11 @@ const MAIN_NAV = [
   { to: "learning", label: "Обучение", icon: BookOpen, roles: [...CONTENT, "department_head", "employee"] },
   { to: "hr-dashboard", label: "Квалификация", icon: GraduationCap, roles: HR },
   { to: "my-tests", label: "Мои тесты", icon: GraduationCap, roles: ["employee"] },
+  { to: "my-regulation", label: "Мой регламент", icon: ClipboardList, roles: ["employee", "department_head", "methodologist"] },
   { to: "calendar", label: "Календарь", icon: CalendarDays, roles: HR },
 ];
 const MANAGEMENT_NAV = [
+  { to: "regulations", label: "Регламенты", icon: ClipboardList, roles: HR },
   { to: "knowledge", label: "Программы по должностям", icon: Layers, roles: CONTENT },
   { to: "materials", label: "Материалы и тесты", icon: Library, roles: CONTENT },
   { to: "organization", label: "Структура компании", icon: Building2, roles: [...HR, "department_head"] },

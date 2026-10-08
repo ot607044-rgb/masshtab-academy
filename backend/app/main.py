@@ -12,7 +12,7 @@ from app.models.base import utc_now
 from app.config import settings
 from app.api.v1 import auth, companies, users, departments, positions, employees, knowledge, lessons, assignments, support, tests, notifications, analytics, custom_fields, custom_sections, statuses, integrations
 import uuid
-from app.api.v1 import recruitment, workspace, access
+from app.api.v1 import recruitment, workspace, access, regulations
 
 
 async def _create_superadmin() -> None:
@@ -90,6 +90,7 @@ app.include_router(recruitment.router, prefix="/api/v1/recruitment", tags=["recr
 app.include_router(recruitment.public_router, prefix="/api/v1/public-calendar", tags=["public-calendar"])
 app.include_router(workspace.router, prefix="/api/v1/workspace", tags=["workspace"])
 app.include_router(access.router, prefix="/api/v1/access", tags=["access"])
+app.include_router(regulations.router, prefix="/api/v1/regulations", tags=["regulations"])
 
 
 @app.get("/health", tags=["system"])

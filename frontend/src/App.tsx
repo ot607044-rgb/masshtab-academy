@@ -26,6 +26,8 @@ import ManagerDashboardPage from "./pages/ManagerDashboardPage";
 import SettingsPage from "./pages/SettingsPage";
 import CustomSectionPage from "./pages/CustomSectionPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RegulationsPage from "./pages/RegulationsPage";
+import MyRegulationPage from "./pages/MyRegulationPage";
 import WorkspacePage from "./pages/WorkspacePage";
 import RecruitmentPage from "./pages/RecruitmentPage";
 import CalendarPage from "./pages/CalendarPage";
@@ -92,6 +94,8 @@ const AppRoutes: React.FC = () => (
       <Route path="learning" element={<LearningPage />} />
       <Route path="materials" element={<ProtectedRoute allowedRoles={[...HR_ROLES, "methodologist"]}><MaterialsPage /></ProtectedRoute>} />
       <Route path="organization" element={<ProtectedRoute allowedRoles={[...HR_ROLES, "department_head"]}><OrganizationPage /></ProtectedRoute>} />
+      <Route path="regulations" element={<ProtectedRoute allowedRoles={[...HR_ROLES]}><RegulationsPage /></ProtectedRoute>} />
+      <Route path="my-regulation" element={<MyRegulationPage />} />
       <Route path="hr-dashboard" element={<ProtectedRoute allowedRoles={[...HR_ROLES]}><QualificationPage /></ProtectedRoute>} />
       <Route path="my-department"    element={<ProtectedRoute allowedRoles={["department_head"]}><ManagerDashboardPage /></ProtectedRoute>} />
       <Route path="employees"        element={<ProtectedRoute allowedRoles={[...HR_ROLES, "department_head"]}><EmployeesPage /></ProtectedRoute>} />

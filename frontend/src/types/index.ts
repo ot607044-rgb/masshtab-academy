@@ -539,7 +539,8 @@ export type NotificationType =
   | "deadline_soon"
   | "overdue"
   | "test_failed"
-  | "retake_needed";
+  | "retake_needed"
+  | "regulation_assigned";
 
 export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   lesson_assigned: "Новый урок",
@@ -548,6 +549,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   overdue: "Просрочено",
   test_failed: "Тест не сдан",
   retake_needed: "Нужна пересдача",
+  regulation_assigned: "Новый регламент",
 };
 
 export const NOTIFICATION_TYPE_ICONS: Record<NotificationType, string> = {
@@ -557,6 +559,7 @@ export const NOTIFICATION_TYPE_ICONS: Record<NotificationType, string> = {
   overdue: "🚨",
   test_failed: "❌",
   retake_needed: "🔄",
+  regulation_assigned: "📋",
 };
 
 export interface Notification {
