@@ -73,3 +73,20 @@ test("list editor supports clearing fields cancellation and failed saves", async
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByText("Доступ запрещён", { exact: true })).toBeVisible();
 });
+
+test("profile editor saves formatted duties with a font and shows them on the profile", async ({ page }) => {
+  await page.goto("/dashboard/employees/e1");
+  await page.getByRole("tab", { name: "Профиль", exact: true }).click();
+  await page.getByRole("button", { name: "Редактировать профиль", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Редактирование сотрудника" });
+  await dialog.getByLabel("Обязанности", { exact: true }).fill("Продукт: Сданная отчётность Работы: 1. Учёт 2. Налоги");
+  await dialog.getByRole("toolbar").getByRole("combobox").first().selectOption("serif");
+  await page.screenshot({ path: `../design-preview/implementation/employee-duties-${test.info().project.name}.png` });
+  await dialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await page.reload();
+  await page.getByRole("tab", { name: "Профиль", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Обязанности", exact: true })).toBeVisible();
+  await expect(page.getByText("Налоги", { exact: true }).last()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});

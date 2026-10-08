@@ -62,8 +62,9 @@ const InlineForm: React.FC<{ label: string; placeholder: string; onSubmit: (name
   );
 };
 
-const PersonNode: React.FC<{ title: string; name: string; tone: string; selected: boolean; compact?: boolean; onSelect: () => void; drag?: DragAttrs; avatarOf?: string }> = ({ title, name, tone, selected, compact, onSelect, drag, avatarOf }) => (
-  <button type="button" className={`${s.personNode} ${compact ? s.compact : ""} ${selected ? s.selected : ""} ${drag?.draggable ? s.draggable : ""}`} onClick={onSelect} aria-pressed={selected} {...drag}>
+type HoverAttrs = Pick<React.HTMLAttributes<HTMLElement>, "onMouseEnter" | "onMouseLeave" | "onFocus" | "onBlur">;
+const PersonNode: React.FC<{ title: string; name: string; tone: string; selected: boolean; compact?: boolean; onSelect: () => void; drag?: DragAttrs; avatarOf?: string; hover?: HoverAttrs }> = ({ title, name, tone, selected, compact, onSelect, drag, avatarOf, hover }) => (
+  <button type="button" className={`${s.personNode} ${compact ? s.compact : ""} ${selected ? s.selected : ""} ${drag?.draggable ? s.draggable : ""}`} onClick={onSelect} aria-pressed={selected} {...drag} {...hover}>
     <span className={`${s.avatar} ${s[`tone_${tone}`]}`}>{initials(avatarOf ?? name)}</span>
     <span className={s.personCopy}><strong>{title}</strong><small>{name}</small></span>
     {!compact && <ChevronRight size={15} aria-hidden="true" />}
@@ -111,6 +112,8 @@ const StructureMapPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [editing, setEditing] = useState<Department | null>(null);
+  const [hovered, setHovered] = useState<{ id: string; rect: DOMRect } | null>(null);
+  const hoverTimer = useRef<number>();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [openRoles, setOpenRoles] = useState<Set<string>>(new Set());
   const [selection, setSelection] = useState<Selection>(null);
@@ -505,7 +508,7 @@ const StructureMapPage: React.FC = () => {
           <ul className={s.employees}>
             {shown.map((e) => (
               <li key={e.id} className={s.employeeNode}>
-                <PersonNode compact title={titleOf(e)} name={e.full_name} tone={toneOf(deptId)} selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} drag={dragAttrs("employee", e.id)} />
+                <PersonNode compact title={titleOf(e)} name={e.full_name} tone={toneOf(deptId)} selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} drag={dragAttrs("employee", e.id)} hover={hoverOf(e)} />
               </li>
             ))}
           </ul>
@@ -578,7 +581,7 @@ const StructureMapPage: React.FC = () => {
             {tools(dept)}
           </div>
           {head ? (
-            <PersonNode title={titleOf(head)} name={head.full_name} tone={toneOf(dept.id)} selected={isSel("employee", head.id)} onSelect={() => setSelection({ kind: "employee", id: head.id })} />
+            <PersonNode title={titleOf(head)} name={head.full_name} tone={toneOf(dept.id)} selected={isSel("employee", head.id)} onSelect={() => setSelection({ kind: "employee", id: head.id })} hover={hoverOf(head)} />
           ) : (
             <div className={s.noHead}>Руководитель не назначен</div>
           )}
@@ -600,6 +603,19 @@ const StructureMapPage: React.FC = () => {
       </div>
     );
   };
+
+  // Наведение на сотрудника с заполненными обязанностями → всплывающая карточка
+  const hoverOf = (e: Employee): HoverAttrs | undefined => {
+    if (!e.duties) return undefined;
+    const show = (ev: React.SyntheticEvent<HTMLElement>) => {
+      const rect = ev.currentTarget.getBoundingClientRect();
+      window.clearTimeout(hoverTimer.current);
+      hoverTimer.current = window.setTimeout(() => setHovered({ id: e.id, rect }), 250);
+    };
+    const hide = () => { window.clearTimeout(hoverTimer.current); setHovered(null); };
+    return { onMouseEnter: show, onFocus: show, onMouseLeave: hide, onBlur: hide };
+  };
+  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
 
   // ── Inspector ────────────────────────────────────────────────────────────────
   const current = selection && (selection.kind === "department" ? deptById.has(selection.id) : selection.kind === "position" ? posById.has(selection.id) : empById.has(selection.id)) ? selection : null;
@@ -706,6 +722,7 @@ const StructureMapPage: React.FC = () => {
           <Row label="Подразделение">{d ? deptPath(d.id) : isTop(e) ? "Руководство компании" : "—"}</Row>
           {e.status && <Row label="Статус">{EMPLOYEE_STATUS_LABELS[e.status] ?? e.status}</Row>}
         </div>
+        {e.duties && <div className={s.section}><span className={s.detailLabel}>Обязанности</span><DescriptionText text={e.duties} font={e.duties_font} size={e.duties_size} /></div>}
         {(pos?.required_skills?.length ?? 0) > 0 && (
           <div className={s.section}><span className={s.detailLabel}>Зона ответственности</span><div className={s.tags}>{pos!.required_skills!.map((k) => <span key={k}>{k}</span>)}</div></div>
         )}
@@ -753,7 +770,7 @@ const StructureMapPage: React.FC = () => {
           const st = statsOf(e.id);
           return (
             <PersonNode key={e.id} title={e.full_name} name={st.total ? `в подчинении ${st.total} чел. · прямых ${st.direct}` : "нет подчинённых"} avatarOf={e.full_name}
-              tone="purple" selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} drag={dragAttrs("employee", e.id)} />
+              tone="purple" selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} drag={dragAttrs("employee", e.id)} hover={hoverOf(e)} />
           );
         }) : <div className={s.noHead}>Вакансия{canEdit ? " — перетащите сюда сотрудника" : ""}</div>}
       </div>
@@ -974,6 +991,21 @@ const StructureMapPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {hovered && (() => {
+        const e = empById.get(hovered.id);
+        if (!e?.duties) return null;
+        const width = 320;
+        const left = hovered.rect.right + 10 + width < window.innerWidth ? hovered.rect.right + 10 : Math.max(8, hovered.rect.left - width - 10);
+        const top = Math.min(Math.max(8, hovered.rect.top), window.innerHeight - 340);
+        return (
+          <div className={s.hoverCard} style={{ left, top, width }} role="tooltip">
+            <strong>{e.full_name}</strong>
+            <small>{titleOf(e)}</small>
+            <DescriptionText text={e.duties} font={e.duties_font} size={e.duties_size} />
+          </div>
+        );
+      })()}
 
       {notice && (
         <button type="button" className={`${s.toast} ${notice.error ? s.toastError : ""}`} onClick={() => setNotice(null)} role="status">

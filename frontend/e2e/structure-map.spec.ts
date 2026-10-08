@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
     else if (path === "/api/v1/companies/company") body = { id: "company", name: "Отчет" };
     else if (path === "/api/v1/employees/") body = [
       { id: "e1", full_name: "Ольга Юнусова", department_id: "d1", position_id: null },
-      { id: "e2", full_name: "Римма Адилова", department_id: "d2", position_id: "p1" },
+      { id: "e2", full_name: "Римма Адилова", department_id: "d2", position_id: "p1", duties: "Продукт: Достоверная отчётность Работы: 1. Учёт расходов 2. Сдача налоговой отчётности" },
     ];
     else if (path === "/api/v1/departments/" && request.method() === "POST") {
       body = { id: `d${departments.length + 1}`, description: null, head_id: null, company_id: "company", parent_id: null, ...request.postDataJSON() };
@@ -190,7 +190,7 @@ test("employee is shown in own department even if the position belongs to anothe
   const patches: { path: string; body: Record<string, unknown> }[] = [];
   await page.route("**/api/v1/employees/", route => route.fulfill({ json: [
     { id: "e1", full_name: "Ольга Юнусова", department_id: "d1", position_id: null },
-    { id: "e2", full_name: "Римма Адилова", department_id: "d2", position_id: "p1" },
+    { id: "e2", full_name: "Римма Адилова", department_id: "d2", position_id: "p1", duties: "Продукт: Достоверная отчётность Работы: 1. Учёт расходов 2. Сдача налоговой отчётности" },
     { id: "e3", full_name: "Наталья Шерстнева", department_id: "d3", position_id: "p1" },
   ] }));
   await page.route(/\/api\/v1\/employees\/e\d$/, async route => {
@@ -225,7 +225,7 @@ test("leadership position can be returned to a department or deleted", async ({ 
     : route.fallback());
   await page.route("**/api/v1/employees/", route => route.fulfill({ json: [
     { id: "e1", full_name: "Ольга Юнусова", department_id: "d1", position_id: null },
-    { id: "e2", full_name: "Римма Адилова", department_id: "d2", position_id: "p1" },
+    { id: "e2", full_name: "Римма Адилова", department_id: "d2", position_id: "p1", duties: "Продукт: Достоверная отчётность Работы: 1. Учёт расходов 2. Сдача налоговой отчётности" },
     { id: "e4", full_name: "Ксения Андреева", department_id: null, position_id: "t1" },
   ] }));
   await page.route(/\/api\/v1\/(positions|employees)\/[a-z0-9]+$/, async route => {
@@ -279,4 +279,17 @@ test("department edit dialog formats description, picks a font and switches depa
   await dialog.getByRole("button", { name: "Сохранить и перейти" }).click();
   await expect(dialog.getByLabel("Название отдела *")).toHaveValue("Отдел ГБ");
   expect(patches[0]).toMatchObject({ description_font: "serif", description: "Продукт: Обученные сотрудники Работы: 1. Найм 2. Адаптация" });
+});
+
+test("employee duties appear on hover and in the employee card", async ({ page }) => {
+  await page.goto("/dashboard/organization");
+  await page.getByRole("button", { name: "Показать сотрудников: Главный бухгалтер" }).click();
+  const node = page.getByRole("button", { name: /Главный бухгалтер\s*Римма Адилова/ });
+  await node.hover();
+  const tip = page.getByRole("tooltip");
+  await expect(tip.getByText("Сдача налоговой отчётности")).toBeVisible();
+  await page.screenshot({ path: `../design-preview/implementation/structure-duties-hover-${test.info().project.name}.png` });
+  await node.click();
+  await expect(page.getByText("Обязанности", { exact: true })).toBeVisible();
+  await expect(page.getByText("Учёт расходов", { exact: true }).first()).toBeVisible();
 });

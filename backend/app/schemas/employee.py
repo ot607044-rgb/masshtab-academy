@@ -3,6 +3,7 @@ from uuid import UUID
 from datetime import date, datetime
 from typing import Annotated, Optional, List, Any
 from app.models.employee import EmployeeStatus
+from app.schemas.department import DescriptionFont, DescriptionSize
 
 EmployeeName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 EmployeeEmail = Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)]
@@ -18,6 +19,9 @@ class EmployeeCreate(BaseModel):
     manager_id: Optional[UUID] = None
     status: EmployeeStatus = EmployeeStatus.ACTIVE
     hire_date: Optional[date] = None
+    duties: Optional[str] = None
+    duties_font: Optional[DescriptionFont] = None
+    duties_size: Optional[DescriptionSize] = None
     weak_areas: Optional[List[str]] = None
 
 
@@ -30,6 +34,9 @@ class EmployeeUpdate(BaseModel):
     manager_id: Optional[UUID] = None
     status: Optional[EmployeeStatus] = None
     hire_date: Optional[date] = None
+    duties: Optional[str] = None
+    duties_font: Optional[DescriptionFont] = None
+    duties_size: Optional[DescriptionSize] = None
     weak_areas: Optional[List[str]] = None
     learning_history: Optional[List[Any]] = None
     test_results: Optional[dict] = None
@@ -55,6 +62,9 @@ class EmployeeResponse(BaseModel):
     user_id: Optional[UUID]
     status: EmployeeStatus
     hire_date: Optional[date]
+    duties: Optional[str] = None
+    duties_font: Optional[str] = None
+    duties_size: Optional[int] = None
     weak_areas: Optional[List[str]]
     learning_history: Optional[List[Any]]
     test_results: Optional[dict]

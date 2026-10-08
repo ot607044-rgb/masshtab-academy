@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Text, ForeignKey, Enum, Date, JSON
+from sqlalchemy import Column, String, Text, ForeignKey, Enum, Date, JSON, SmallInteger
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -48,6 +48,10 @@ class Employee(Base, TimestampMixin):
 
     status = Column(Enum(EmployeeStatus), default=EmployeeStatus.ACTIVE, nullable=False)
     hire_date = Column(Date, nullable=True)
+    # Обязанности сотрудника и их оформление в карточке (как описание отдела)
+    duties = Column(Text, nullable=True)
+    duties_font = Column(String(16), nullable=True)
+    duties_size = Column(SmallInteger, nullable=True)
     weak_areas = Column(JSON, nullable=True)       # list[str]
     learning_history = Column(JSON, nullable=True) # list[dict]
     test_results = Column(JSON, nullable=True)     # dict

@@ -23,18 +23,6 @@
 .hint { margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: #f7f5fb; color: #6b6574; font-size: 12px; line-height: 1.55; }
 
 .editor { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 16px 24px 0; }
-.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px; margin-bottom: 12px; border: 1px solid #ece9ef; border-radius: 10px; background: #faf9fc; }
-.toolField { display: flex; align-items: center; gap: 6px; color: #6b6574; font-size: 12px; }
-.toolField select { width: auto; padding: 5px 8px; font-size: 13px; }
-.sep { width: 1px; height: 22px; margin: 0 4px; background: #e2dee8; }
-.tool { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; background: transparent; color: #4b4654; }
-.tool:hover { background: #ece8f6; color: #5b4bc4; }
-
-.panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding-bottom: 12px; }
-.pane { min-height: 0; display: flex; flex-direction: column; }
-.pane textarea { flex: 1; min-height: 240px; resize: none; line-height: 1.5; }
-.preview { flex: 1; min-height: 240px; padding: 14px 16px; border: 1.5px dashed #e2dee8; border-radius: 8px; background: #fcfbfd; overflow-y: auto; }
-.empty { margin: 0; color: #a39dab; font-size: 12px; }
 
 .footer { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 14px 24px; border-top: 1px solid #ece9ef; }
 .footer :global(.error-msg) { flex: 1; margin: 0; }
@@ -47,9 +35,6 @@
   .body { display: flex; flex-direction: column; overflow-y: auto; }
   .side { border-right: 0; border-bottom: 1px solid #ece9ef; padding: 16px; overflow: visible; }
   .editor { padding: 16px 16px 0; }
-  .editor, .panes, .pane { flex: none; min-height: auto; }
-  .panes { grid-template-columns: 1fr; }
-  .pane textarea { flex: none; height: 240px; }
-  .preview { flex: none; min-height: 140px; }
+  .editor { flex: none; min-height: auto; }
   .footer { position: sticky; bottom: 0; background: #fff; padding: 12px 16px; }
 }

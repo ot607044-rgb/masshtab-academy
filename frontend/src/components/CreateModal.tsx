@@ -21,9 +21,11 @@ interface Props {
   initialValues?: Record<string, string>;
   submitLabel?: string;
   errorMessage?: string;
+  /** Широкое окно (для форм с большим текстовым полем). */
+  wide?: boolean;
 }
 
-const CreateModal: React.FC<Props> = ({ title, fields, onClose, onCreate, extraContent, initialValues, submitLabel = "Создать", errorMessage = "Ошибка создания" }) => {
+const CreateModal: React.FC<Props> = ({ title, fields, onClose, onCreate, extraContent, initialValues, submitLabel = "Создать", errorMessage = "Ошибка создания", wide }) => {
   const formId = useId();
   const [form, setForm] = useState<Record<string, string>>(() =>
     Object.fromEntries(fields.map((f) => [f.name, initialValues?.[f.name] ?? f.options?.[0]?.value ?? ""]))
@@ -46,7 +48,7 @@ const CreateModal: React.FC<Props> = ({ title, fields, onClose, onCreate, extraC
 
   return (
     <div className={styles.overlay}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby={`${formId}-title`}>
+      <div className={`${styles.modal} ${wide ? styles.wide : ""}`} role="dialog" aria-modal="true" aria-labelledby={`${formId}-title`}>
         <div className={styles.header}>
           <h2 id={`${formId}-title`}>{title}</h2>
           <button onClick={onClose} disabled={loading} aria-label="Закрыть" className={styles.close}>✕</button>

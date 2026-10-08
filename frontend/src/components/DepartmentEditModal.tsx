@@ -1,7 +1,8 @@
 import React, { useEffect, useId, useRef, useState } from "react";
-import { Bold, ChevronLeft, ChevronRight, Heading, List, ListOrdered, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { Department, DepartmentCreate, DescriptionFont, Employee } from "../types";
-import DescriptionText, { DEFAULT_DESCRIPTION_SIZE, DESCRIPTION_FONTS, DESCRIPTION_SIZES } from "./DescriptionText";
+import { DEFAULT_DESCRIPTION_SIZE } from "./DescriptionText";
+import DescriptionEditor from "./DescriptionEditor";
 import s from "./DepartmentEditModal.module.css";
 
 interface Option { value: string; label: string }
@@ -35,7 +36,6 @@ const DepartmentEditModal: React.FC<Props> = ({ department, order, employees, pa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<Department | null>(null);
-  const textRef = useRef<HTMLTextAreaElement>(null);
 
   const dirty = (Object.keys(initial) as (keyof Form)[]).some((k) => initial[k] !== form[k]);
   const index = order.findIndex((d) => d.id === department.id);
@@ -83,32 +83,6 @@ const DepartmentEditModal: React.FC<Props> = ({ department, order, employees, pa
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  // ── Панель форматирования: правит текст вокруг выделения ──
-  const edit = (fn: (text: string, start: number, end: number) => { text: string; start: number; end: number }) => {
-    const el = textRef.current;
-    if (!el) return;
-    const r = fn(form.description, el.selectionStart, el.selectionEnd);
-    set("description", r.text);
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(r.start, r.end); });
-  };
-  const wrapBold = () => edit((t, a, b) => {
-    const inner = t.slice(a, b) || "текст";
-    return { text: `${t.slice(0, a)}**${inner}**${t.slice(b)}`, start: a + 2, end: a + 2 + inner.length };
-  });
-  const insertHeading = () => edit((t, a, b) => {
-    const label = t.slice(a, b).replace(/:$/, "") || "Заголовок";
-    const before = t.slice(0, a);
-    const lead = before && !before.endsWith("\n") ? "\n" : "";
-    return { text: `${before}${lead}${label}: ${t.slice(b)}`, start: a + lead.length, end: a + lead.length + label.length };
-  });
-  const prefixLines = (numbered: boolean) => edit((t, a, b) => {
-    const from = t.lastIndexOf("\n", a - 1) + 1;
-    const toIdx = t.indexOf("\n", b);
-    const to = toIdx === -1 ? t.length : toIdx;
-    const block = t.slice(from, to).split("\n").map((l, i) => `${numbered ? `${i + 1}.` : "•"} ${l.replace(/^(\d{1,2}[.)]|[•\-–])\s+/, "")}`).join("\n");
-    return { text: t.slice(0, from) + block + t.slice(to), start: from, end: from + block.length };
-  });
 
   const heads = employees.filter((e) => e.status !== "fired" || e.id === department.head_id).sort((a, b) => a.full_name.localeCompare(b.full_name, "ru"));
 
@@ -159,45 +133,13 @@ const DepartmentEditModal: React.FC<Props> = ({ department, order, employees, pa
             </p>
           </aside>
 
-          <section className={s.editor}>
-            <div className={s.toolbar} role="toolbar" aria-label="Оформление описания">
-              <label className={s.toolField}>
-                <span>Шрифт</span>
-                <select value={form.font} onChange={(e) => set("font", e.target.value as DescriptionFont)}>
-                  {DESCRIPTION_FONTS.map((f) => <option key={f.value} value={f.value} style={{ fontFamily: f.css }}>{f.label}</option>)}
-                </select>
-              </label>
-              <label className={s.toolField}>
-                <span>Размер</span>
-                <select value={form.size} onChange={(e) => set("size", Number(e.target.value))}>
-                  {DESCRIPTION_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </label>
-              <span className={s.sep} />
-              <button type="button" className={s.tool} onClick={wrapBold} title="Жирный (**текст**)" aria-label="Жирный"><Bold size={15} /></button>
-              <button type="button" className={s.tool} onClick={insertHeading} title="Заголовок («Работы:»)" aria-label="Заголовок"><Heading size={15} /></button>
-              <button type="button" className={s.tool} onClick={() => prefixLines(true)} title="Нумерованный список" aria-label="Нумерованный список"><ListOrdered size={15} /></button>
-              <button type="button" className={s.tool} onClick={() => prefixLines(false)} title="Маркированный список" aria-label="Маркированный список"><List size={15} /></button>
-            </div>
-            <div className={s.panes}>
-              <div className={s.pane}>
-                <label htmlFor={`${id}-desc`}>Описание</label>
-                <textarea
-                  id={`${id}-desc`} ref={textRef} value={form.description} onChange={(e) => set("description", e.target.value)}
-                  placeholder={"Продукт: …\nРаботы:\n1. …\n2. …"}
-                  style={{ fontFamily: DESCRIPTION_FONTS.find((f) => f.value === form.font)?.css, fontSize: form.size }}
-                />
-              </div>
-              <div className={s.pane}>
-                <span className={s.paneLabel}>Как будет в карточке</span>
-                <div className={s.preview}>
-                  {form.description.trim()
-                    ? <DescriptionText text={form.description} font={form.font} size={form.size} />
-                    : <p className={s.empty}>Описание пока пустое</p>}
-                </div>
-              </div>
-            </div>
-          </section>
+          <div className={s.editor}>
+            <DescriptionEditor
+              fill label="Описание" value={form.description} font={form.font} size={form.size}
+              onChange={(v) => set("description", v)} onFont={(v) => set("font", v)} onSize={(v) => set("size", v)}
+              placeholder={"Продукт: …\nРаботы:\n1. …\n2. …"}
+            />
+          </div>
 
           <footer className={s.footer}>
             {error && <div className="error-msg" role="alert">{error}</div>}

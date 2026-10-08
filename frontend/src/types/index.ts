@@ -120,6 +120,9 @@ export interface Employee {
   user_id: string | null;
   status: EmployeeStatus;
   hire_date: string | null;
+  duties?: string | null;
+  duties_font?: DescriptionFont | null;
+  duties_size?: number | null;
   weak_areas: string[] | null;
   learning_history: unknown[] | null;
   test_results: Record<string, unknown> | null;
@@ -146,6 +149,9 @@ export type EmployeeUpdate = Partial<{
   manager_id: string | null;
   status: EmployeeStatus;
   hire_date: string | null;
+  duties: string | null;
+  duties_font: DescriptionFont | null;
+  duties_size: number | null;
 }>;
 
 // ── Knowledge ─────────────────────────────────────────────────────────────────

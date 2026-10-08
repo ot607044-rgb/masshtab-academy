@@ -85,6 +85,9 @@
 .academy-profile { display: grid; grid-template-columns: 150px 1fr; gap: 18px; font-size: 13px; }
 .academy-profile dt { color: #717982; }
 .academy-profile dd { overflow-wrap: anywhere; }
+.academy-duties { margin-top: 22px; padding-top: 18px; border-top: 1px solid #edf0f2; }
+.academy-duties h3 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
+.academy-duties-empty { margin: 0; color: #717982; font-size: 13px; }
 .academy-calendar-page { background: #f6f7f9; min-height: 100%; }
 .academy-calendar-shell { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; align-items: start; }
 .academy-calendar-main, .academy-calendar-side { display: grid; gap: 18px; min-width: 0; }

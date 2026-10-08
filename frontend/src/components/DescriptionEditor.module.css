@@ -1,0 +1,27 @@
+.editor { min-width: 0; display: flex; flex-direction: column; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px; margin-bottom: 12px; border: 1px solid #ece9ef; border-radius: 10px; background: #faf9fc; }
+.toolField { display: flex; align-items: center; gap: 6px; margin: 0; color: #6b6574; font-size: 12px; font-weight: 400; }
+.toolField select { width: auto; padding: 5px 8px; font-size: 13px; }
+.sep { width: 1px; height: 22px; margin: 0 4px; background: #e2dee8; }
+.tool { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; background: transparent; color: #4b4654; }
+.tool:hover { background: #ece8f6; color: #5b4bc4; }
+
+.panes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.pane { min-height: 0; display: flex; flex-direction: column; }
+.pane label, .paneLabel { display: block; margin: 0 0 6px; color: #374151; font-size: 0.85rem; font-weight: 500; }
+.pane textarea { height: 240px; resize: vertical; line-height: 1.5; }
+.preview { min-height: 240px; padding: 14px 16px; border: 1.5px dashed #e2dee8; border-radius: 8px; background: #fcfbfd; overflow-y: auto; }
+.empty { margin: 0; color: #a39dab; font-size: 12px; }
+
+/* Режим «во всю высоту» для широкого окна отдела */
+.fill { flex: 1; min-height: 0; }
+.fill .panes { flex: 1; min-height: 0; padding-bottom: 12px; }
+.fill .pane textarea { flex: 1; height: auto; min-height: 240px; resize: none; }
+.fill .preview { flex: 1; }
+
+@media (max-width: 900px) {
+  .fill, .fill .panes, .fill .pane { flex: none; min-height: auto; }
+  .panes { grid-template-columns: 1fr; }
+  .pane textarea, .fill .pane textarea { flex: none; height: 220px; }
+  .preview, .fill .preview { flex: none; min-height: 140px; }
+}
