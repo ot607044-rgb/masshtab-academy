@@ -258,3 +258,25 @@ test("leadership position can be returned to a department or deleted", async ({ 
   await expect(page.getByRole("heading", { name: "Собственник", exact: true })).toHaveCount(0);
   expect(calls).toEqual(["DELETE /api/v1/positions/t2 "]);
 });
+
+test("department edit dialog formats description, picks a font and switches departments", async ({ page }) => {
+  const patches: Record<string, unknown>[] = [];
+  await page.route(/\/api\/v1\/departments\/d\d$/, async route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    patches.push(body);
+    const id = new URL(route.request().url()).pathname.split("/").pop();
+    await route.fulfill({ json: { id, company_id: "company", head_id: null, parent_id: id === "d2" ? "d1" : null, ...body } });
+  });
+  await page.goto("/dashboard/organization");
+  await page.getByRole("button", { name: "Редактировать отдел Производство", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Редактирование отдела" });
+  await dialog.getByLabel("Описание", { exact: true }).fill("Продукт: Обученные сотрудники Работы: 1. Найм 2. Адаптация");
+  await expect(dialog.getByText("Адаптация", { exact: true })).toBeVisible();
+  await dialog.getByRole("toolbar").getByRole("combobox").first().selectOption("serif");
+  await page.screenshot({ path: `../design-preview/implementation/department-edit-${test.info().project.name}.png` });
+
+  await dialog.getByRole("button", { name: "Следующий отдел" }).click();
+  await dialog.getByRole("button", { name: "Сохранить и перейти" }).click();
+  await expect(dialog.getByLabel("Название отдела *")).toHaveValue("Отдел ГБ");
+  expect(patches[0]).toMatchObject({ description_font: "serif", description: "Продукт: Обученные сотрудники Работы: 1. Найм 2. Адаптация" });
+});

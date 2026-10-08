@@ -58,15 +58,21 @@ export interface Department {
   id: string;
   name: string;
   description: string | null;
+  description_font?: DescriptionFont | null;
+  description_size?: number | null;
   company_id: string;
   head_id: string | null;
   parent_id?: string | null;
   created_at: string;
 }
 
+export type DescriptionFont = "sans" | "serif" | "mono";
+
 export interface DepartmentCreate {
   name: string;
   description?: string | null;
+  description_font?: DescriptionFont | null;
+  description_size?: number | null;
   head_id?: string | null;
   parent_id?: string | null;
 }

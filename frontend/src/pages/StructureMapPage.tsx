@@ -5,10 +5,11 @@ import { getDepartments, createDepartment, updateDepartment, deleteDepartment } 
 import { getPositions, createPosition, updatePosition, deletePosition } from "../api/positions";
 import { getEmployees, updateEmployee } from "../api/employees";
 import { getCompany } from "../api/companies";
-import type { Department, Employee, Position } from "../types";
+import type { Department, DepartmentCreate, Employee, Position } from "../types";
 import { EMPLOYEE_STATUS_LABELS } from "../types";
 import { useAuth } from "../context/AuthContext";
-import CreateModal from "../components/CreateModal";
+import DepartmentEditModal from "../components/DepartmentEditModal";
+import DescriptionText from "../components/DescriptionText";
 import page from "./PageContent.module.css";
 import s from "./StructureMap.module.css";
 
@@ -348,15 +349,10 @@ const StructureMapPage: React.FC = () => {
     setDepartments(await getDepartments());
     if (selection?.id === dept.id) setSelection(null);
   };
-  const saveEdit = async (form: Record<string, string>) => {
-    if (!editing) return;
-    const name = form.name.trim();
-    if (!name) throw { response: { data: { detail: "Введите название отдела" } } };
-    const saved: Department = await updateDepartment(editing.id, {
-      name, description: form.description.trim() || null, head_id: form.head_id || null, parent_id: form.parent_id || null,
-    });
+  const saveEdit = async (id: string, payload: Partial<DepartmentCreate>) => {
+    const saved: Department = await updateDepartment(id, payload);
     setDepartments((prev) => prev.map((d) => (d.id === saved.id ? saved : d)));
-    setEditing(null);
+    return saved;
   };
   const startNewDepartment = () => {
     setQuery("");
@@ -639,7 +635,7 @@ const StructureMapPage: React.FC = () => {
             <Row label="Подотделы">{subs.length ? subs.map((c) => c.name).join(", ") : "Нет"}</Row>
             <Row label="Численность">{people(peopleIn(d.id))}</Row>
           </div>
-          {d.description && <div className={s.section}><span className={s.detailLabel}>Описание</span><p className={s.text}>{d.description}</p></div>}
+          {d.description && <div className={s.section}><span className={s.detailLabel}>Описание</span><DescriptionText text={d.description} font={d.description_font} size={d.description_size} /></div>}
           <div className={s.section}>
             <span className={s.detailLabel}>Должности · {deptPositions.length}</span>
             {deptPositions.length ? (
@@ -730,6 +726,9 @@ const StructureMapPage: React.FC = () => {
     { value: "", label: "— верхний уровень —" },
     ...departments.filter((d) => d.id !== editing.id && !descendants(editing.id).includes(d.id)).sort(byName).map((d) => ({ value: d.id, label: d.name })),
   ] : [];
+  const treeOrder: Department[] = [];
+  const pushTree = (list: Department[]) => list.forEach((d) => { treeOrder.push(d); pushTree(childrenOf(d.id)); });
+  pushTree(roots);
   const visibleRoots = roots.filter((r) => deptVisible(r.id));
 
   const renderLeader = (p: Position) => {
@@ -983,19 +982,15 @@ const StructureMapPage: React.FC = () => {
       )}
 
       {editing && (
-        <CreateModal
-          title="Редактирование отдела"
-          fields={[
-            { name: "name", label: "Название отдела *", required: true, maxLength: 255 },
-            { name: "description", label: "Описание" },
-            { name: "head_id", label: "Руководитель", type: "select", options: [{ value: "", label: "— не выбран —" }, ...employees.map((e) => ({ value: e.id, label: e.full_name }))] },
-            { name: "parent_id", label: "Входит в", type: "select", options: parentOptions },
-          ]}
+        <DepartmentEditModal
+          key={editing.id}
+          department={editing}
+          order={treeOrder}
+          employees={employees}
+          parentOptions={parentOptions}
+          onSave={saveEdit}
+          onNavigate={(d) => setEditing(deptById.get(d.id) ?? d)}
           onClose={() => setEditing(null)}
-          onCreate={saveEdit}
-          initialValues={{ name: editing.name, description: editing.description ?? "", head_id: editing.head_id ?? "", parent_id: editing.parent_id ?? "" }}
-          submitLabel="Сохранить"
-          errorMessage="Не удалось сохранить отдел"
         />
       )}
     </div>
