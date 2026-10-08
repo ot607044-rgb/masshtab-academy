@@ -63,7 +63,7 @@
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; background: #fff; color: var(--accent-ink); font-size: 12px; font-weight: 500; }
 
 .variantsGrid { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: 420px; }
-.variants { padding: 18px 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.variants { min-width: 0; padding: 18px 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
 .variants .overline { margin: 0 8px 8px; }
 .variant { width: 100%; padding: 13px 14px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--ink); text-align: left; }
 .variant:hover { background: #f8f7fb; }
