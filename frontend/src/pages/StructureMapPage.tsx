@@ -10,6 +10,7 @@ import { EMPLOYEE_STATUS_LABELS } from "../types";
 import { useAuth } from "../context/AuthContext";
 import DepartmentEditModal from "../components/DepartmentEditModal";
 import DescriptionText from "../components/DescriptionText";
+import usePhotoSrc from "../components/usePhotoSrc";
 import page from "./PageContent.module.css";
 import s from "./StructureMap.module.css";
 
@@ -63,9 +64,19 @@ const InlineForm: React.FC<{ label: string; placeholder: string; onSubmit: (name
 };
 
 type HoverAttrs = Pick<React.HTMLAttributes<HTMLElement>, "onMouseEnter" | "onMouseLeave" | "onFocus" | "onBlur">;
-const PersonNode: React.FC<{ title: string; name: string; tone: string; selected: boolean; compact?: boolean; onSelect: () => void; drag?: DragAttrs; avatarOf?: string; hover?: HoverAttrs }> = ({ title, name, tone, selected, compact, onSelect, drag, avatarOf, hover }) => (
+// Аватар сотрудника: фото из профиля, пока его нет — инициалы
+const Avatar: React.FC<{ name: string; photoUrl?: string | null; tone: string; large?: boolean }> = ({ name, photoUrl, tone, large }) => {
+  const src = usePhotoSrc(photoUrl);
+  return (
+    <span className={`${s.avatar} ${large ? s.avatarLarge : ""} ${s[`tone_${tone}`]} ${src ? s.avatarPhoto : ""}`}>
+      {src ? <img src={src} alt="" /> : initials(name)}
+    </span>
+  );
+};
+
+const PersonNode: React.FC<{ title: string; name: string; tone: string; selected: boolean; compact?: boolean; onSelect: () => void; drag?: DragAttrs; avatarOf?: string; photoUrl?: string | null; hover?: HoverAttrs }> = ({ title, name, tone, selected, compact, onSelect, drag, avatarOf, photoUrl, hover }) => (
   <button type="button" className={`${s.personNode} ${compact ? s.compact : ""} ${selected ? s.selected : ""} ${drag?.draggable ? s.draggable : ""}`} onClick={onSelect} aria-pressed={selected} {...drag} {...hover}>
-    <span className={`${s.avatar} ${s[`tone_${tone}`]}`}>{initials(avatarOf ?? name)}</span>
+    <Avatar name={avatarOf ?? name} photoUrl={photoUrl} tone={tone} />
     <span className={s.personCopy}><strong>{title}</strong><small>{name}</small></span>
     {!compact && <ChevronRight size={15} aria-hidden="true" />}
   </button>
@@ -508,7 +519,7 @@ const StructureMapPage: React.FC = () => {
           <ul className={s.employees}>
             {shown.map((e) => (
               <li key={e.id} className={s.employeeNode}>
-                <PersonNode compact title={titleOf(e)} name={e.full_name} tone={toneOf(deptId)} selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} drag={dragAttrs("employee", e.id)} hover={hoverOf(e)} />
+                <PersonNode compact title={titleOf(e)} name={e.full_name} photoUrl={e.photo_url} tone={toneOf(deptId)} selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} drag={dragAttrs("employee", e.id)} hover={hoverOf(e)} />
               </li>
             ))}
           </ul>
@@ -581,7 +592,7 @@ const StructureMapPage: React.FC = () => {
             {tools(dept)}
           </div>
           {head ? (
-            <PersonNode title={titleOf(head)} name={head.full_name} tone={toneOf(dept.id)} selected={isSel("employee", head.id)} onSelect={() => setSelection({ kind: "employee", id: head.id })} hover={hoverOf(head)} />
+            <PersonNode title={titleOf(head)} name={head.full_name} photoUrl={head.photo_url} tone={toneOf(dept.id)} selected={isSel("employee", head.id)} onSelect={() => setSelection({ kind: "employee", id: head.id })} hover={hoverOf(head)} />
           ) : (
             <div className={s.noHead}>Руководитель не назначен</div>
           )}
@@ -690,7 +701,7 @@ const StructureMapPage: React.FC = () => {
           <div className={s.section}>
             <span className={s.detailLabel}>Сотрудники</span>
             {staff.length ? (
-              <div className={s.stack}>{staff.map((e) => <PersonNode key={e.id} compact title={titleOf(e)} name={e.full_name} tone={toneOf(p.department_id)} selected={false} onSelect={() => setSelection({ kind: "employee", id: e.id })} />)}</div>
+              <div className={s.stack}>{staff.map((e) => <PersonNode key={e.id} compact title={titleOf(e)} name={e.full_name} photoUrl={e.photo_url} tone={toneOf(p.department_id)} selected={false} onSelect={() => setSelection({ kind: "employee", id: e.id })} />)}</div>
             ) : <p className={s.muted}>На должность пока никто не назначен</p>}
           </div>
         </>
@@ -706,7 +717,7 @@ const StructureMapPage: React.FC = () => {
       <>
         <div className={s.inspectorHead}><span>Карточка сотрудника</span>{closeBtn}</div>
         <div className={s.hero}>
-          <span className={`${s.avatar} ${s.avatarLarge} ${s[`tone_${toneOf(e.department_id)}`]}`}>{initials(e.full_name)}</span>
+          <Avatar large name={e.full_name} photoUrl={e.photo_url} tone={toneOf(e.department_id)} />
           <div><strong className={s.heroTitle}>{titleOf(e)}</strong><p>{e.full_name}</p></div>
           {canEdit && <button type="button" className={s.editButton} onClick={() => navigate(`/dashboard/employees/${e.id}`)} aria-label={`Редактировать сотрудника ${e.full_name}`} title="Редактировать"><Pencil size={15} aria-hidden="true" /></button>}
         </div>
@@ -769,7 +780,7 @@ const StructureMapPage: React.FC = () => {
         {staff.length ? staff.map((e) => {
           const st = statsOf(e.id);
           return (
-            <PersonNode key={e.id} title={e.full_name} name={st.total ? `в подчинении ${st.total} чел. · прямых ${st.direct}` : "нет подчинённых"} avatarOf={e.full_name}
+            <PersonNode key={e.id} title={e.full_name} name={st.total ? `в подчинении ${st.total} чел. · прямых ${st.direct}` : "нет подчинённых"} avatarOf={e.full_name} photoUrl={e.photo_url}
               tone="purple" selected={isSel("employee", e.id)} onSelect={() => setSelection({ kind: "employee", id: e.id })} drag={dragAttrs("employee", e.id)} hover={hoverOf(e)} />
           );
         }) : <div className={s.noHead}>Вакансия{canEdit ? " — перетащите сюда сотрудника" : ""}</div>}

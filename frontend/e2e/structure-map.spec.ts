@@ -293,3 +293,19 @@ test("employee duties appear on hover and in the employee card", async ({ page }
   await expect(page.getByText("Обязанности", { exact: true })).toBeVisible();
   await expect(page.getByText("Учёт расходов", { exact: true }).first()).toBeVisible();
 });
+
+test("employee photo from the profile is shown in the structure map and card", async ({ page }) => {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+  await page.route("**/api/v1/employees/", route => route.fulfill({ json: [
+    { id: "e1", full_name: "Ольга Юнусова", department_id: "d1", position_id: null },
+    { id: "e2", full_name: "Римма Адилова", department_id: "d2", position_id: "p1", photo_url: "/api/v1/employees/e2/photo?v=1.png" },
+  ] }));
+  await page.route("**/api/v1/employees/e2/photo**", route => route.fulfill({ body: png, contentType: "image/png" }));
+  await page.goto("/dashboard/organization");
+  await page.getByRole("button", { name: "Показать сотрудников: Главный бухгалтер" }).click();
+  const node = page.getByRole("button", { name: /Главный бухгалтер\s*Римма Адилова/ });
+  await expect(node.locator("img")).toBeVisible();
+  await expect(node).not.toContainText("РА");
+  await node.click();
+  await expect(page.locator("aside img, [class*=inspector] img").first()).toBeVisible();
+});
